@@ -49,11 +49,12 @@ If a required fact is missing, report one consolidated warning instead of scatte
 
 
 class ProposalAI:
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, extraction_model: str, draft_model: str):
         if not api_key:
             raise ValueError("OPENAI_API_KEY is required.")
         self.client = OpenAI(api_key=api_key)
-        self.model = model
+        self.extraction_model = extraction_model
+        self.draft_model = draft_model
 
     def extract_facts(
         self,
@@ -64,7 +65,7 @@ class ProposalAI:
     ) -> ProposalFacts:
         content = build_openai_content(email_text, notes, documents)
         response = self.client.responses.parse(
-            model=self.model,
+            model=self.extraction_model,
             input=[
                 {"role": "system", "content": EXTRACTION_INSTRUCTIONS},
                 {"role": "user", "content": content},
@@ -91,7 +92,7 @@ class ProposalAI:
         rules = rules_path.read_text(encoding="utf-8")
         references_text = reference_context(references)
         response = self.client.responses.parse(
-            model=self.model,
+            model=self.draft_model,
             input=[
                 {"role": "system", "content": DRAFT_INSTRUCTIONS},
                 {
@@ -109,4 +110,3 @@ class ProposalAI:
         if draft is None:
             raise RuntimeError("The model did not return structured proposal content.")
         return draft
-

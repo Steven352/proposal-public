@@ -16,7 +16,8 @@ WORK_AUTHORIZATION_PATH = ASSET_DIR / "work_authorization.pdf"
 STEVEN_SIGNATURE_PATH = ASSET_DIR / "signature_steven.png"
 ABDUL_SIGNATURE_PATH = ASSET_DIR / "signature_abdul.png"
 
-DEFAULT_MODEL = "gpt-5.6-terra"
+DEFAULT_EXTRACTION_MODEL = "gpt-5.6-luna"
+DEFAULT_DRAFT_MODEL = "gpt-5.6-terra"
 
 PREPARED_BY = "Steven Lai"
 PREPARED_BY_TITLE = "Engineer In Training"
@@ -30,4 +31,3 @@ SECTION_ORDER = (
     "Laboratory Testing Program",
     "Engineering Analysis & Report Preparation",
 )
-

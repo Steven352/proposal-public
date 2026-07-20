@@ -8,7 +8,12 @@ import pandas as pd
 import streamlit as st
 
 from proposal_app.ai import ProposalAI
-from proposal_app.config import DEFAULT_MODEL, KNOWLEDGE_INDEX, RULES_PATH
+from proposal_app.config import (
+    DEFAULT_DRAFT_MODEL,
+    DEFAULT_EXTRACTION_MODEL,
+    KNOWLEDGE_INDEX,
+    RULES_PATH,
+)
 from proposal_app.document_builder import build_docx
 from proposal_app.file_ingest import UploadedDocument
 from proposal_app.knowledge import choose_template, load_index, retrieve_references
@@ -80,7 +85,12 @@ def api_client() -> ProposalAI:
         raise ValueError(
             "OPENAI_API_KEY is not configured. Add it in the Streamlit app's Secrets settings."
         )
-    return ProposalAI(api_key=api_key, model=secret("OPENAI_MODEL", DEFAULT_MODEL))
+    legacy_model = secret("OPENAI_MODEL")
+    return ProposalAI(
+        api_key=api_key,
+        extraction_model=secret("OPENAI_EXTRACTION_MODEL", DEFAULT_EXTRACTION_MODEL),
+        draft_model=secret("OPENAI_DRAFT_MODEL", legacy_model or DEFAULT_DRAFT_MODEL),
+    )
 
 
 def uploaded_documents(files) -> list[UploadedDocument]:
@@ -405,4 +415,9 @@ if "generated_outputs" in st.session_state:
 with st.sidebar:
     st.write("Private proposal workspace")
     st.caption(f"Knowledge base: {len(load_index())} historical geotechnical proposals")
-    st.caption(f"Model: {secret('OPENAI_MODEL', DEFAULT_MODEL)}")
+    st.caption(
+        f"Extraction model: {secret('OPENAI_EXTRACTION_MODEL', DEFAULT_EXTRACTION_MODEL)}"
+    )
+    st.caption(
+        f"Draft model: {secret('OPENAI_DRAFT_MODEL', secret('OPENAI_MODEL', DEFAULT_DRAFT_MODEL))}"
+    )

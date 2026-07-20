@@ -12,4 +12,7 @@ The public website also requires `APP_ACCESS_CODE`, so only authorized users can
 submit client material, consume the configured OpenAI API account, or generate
 documents containing signatures.
 
+The default AI routing uses `gpt-5.6-luna` for request and attachment extraction,
+and `gpt-5.6-terra` for professional proposal drafting.
+
 The canonical private source repository is not linked here intentionally.
