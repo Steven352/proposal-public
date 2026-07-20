@@ -16,6 +16,11 @@ class CostLineItem(BaseModel):
     total: float | None = None
 
 
+class InvestigationDepthGroup(BaseModel):
+    quantity: int = Field(gt=0)
+    termination_depth_m: float = Field(gt=0)
+
+
 class ProposalFacts(BaseModel):
     proposal_number: str = ""
     proposal_date: str = Field(default_factory=lambda: date.today().isoformat())
@@ -31,6 +36,8 @@ class ProposalFacts(BaseModel):
     project_type: str = "general building/site development"
     requested_services: list[str] = Field(default_factory=list)
     investigation_methods: list[str] = Field(default_factory=list)
+    borehole_program: list[InvestigationDepthGroup] = Field(default_factory=list)
+    test_pit_program: list[InvestigationDepthGroup] = Field(default_factory=list)
     borehole_quantity: int | None = None
     borehole_depth_m: float | None = None
     test_pit_quantity: int | None = None

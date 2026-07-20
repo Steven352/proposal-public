@@ -15,6 +15,16 @@ documents containing signatures.
 The default AI routing uses `gpt-5.6-luna` for request and attachment extraction,
 and `gpt-5.6-terra` for professional proposal drafting.
 
+The cost editor opens with the standard 26-line ATS/Almor estimate. Every row is
+editable, units can be selected as `hr`, `LS`, or `Ea`, Total is calculated from
+`Est. × Rate`, and the supplied defaults total `$2,221.00`. Zero rows remain in
+the editor and are omitted from the generated proposal.
+
+The Scope tab accepts multiple borehole and test-pit quantity/depth groups.
+Drilling and test pits may be used separately or together; retrieval and drafting
+select drilling-only, test-pit-only, or mixed-investigation references and wording
+without deriving quantities from contractor hours.
+
 The **Add Final Proposal to Library** workflow writes reviewed Final Word files,
 their search records, and private draft/final revision records directly to the
 private source repository. Reusable edits must occur in at least three reviewed

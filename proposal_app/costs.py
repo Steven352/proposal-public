@@ -23,6 +23,61 @@ WORDING_REPLACEMENTS = {
 }
 
 
+def standard_cost_items() -> list[CostLineItem]:
+    rows = [
+        ("Preliminary Work / Meetings", "Intermediate Professional", "Procurement, utility locates, and background review", "hr", 1, 185.0),
+        ("Field Program", "Excavator Contractor", "Excavating test pits", "LS", 0, 1000.0),
+        ("Field Program", "Drilling Contractor", "Mobilization/demobilization and on-site drilling", "hr", 0, 325.0),
+        ("Field Program", "Drilling Consumables", "PVC pipe, bentonite, etc.", "LS", 0, 150.0),
+        ("Field Program", "Locate Contractor", "Secondary utility clearance", "hr", 0, 225.0),
+        ("Field Program", "Engineering Field Personnel", "Logging and sampling", "hr", 5, 135.0),
+        ("Field Program", "Field Personnel", "Groundwater level measurements", "hr", 0, 115.0),
+        ("Field Program", "Field Equipment", "Support vehicle mileage", "Ea", 1, 200.0),
+        ("Field Program", "Disbursements", "Field supplies, etc.", "LS", 0, 0.0),
+        ("Laboratory Testing Program", "Moisture Content Tests", "ASTM D2216", "Ea", 8, 8.25),
+        ("Laboratory Testing Program", "Atterberg Limits", "ASTM D4318", "Ea", 1, 225.0),
+        ("Laboratory Testing Program", "Hydrometer Analysis", "ASTM D7928", "Ea", 1, 275.0),
+        ("Laboratory Testing Program", "Organic Content Tests", "", "Ea", 1, 70.0),
+        ("Laboratory Testing Program", "Sulphate Content Tests", "", "Ea", 2, 65.0),
+        ("Laboratory Testing Program", "Standard Proctor", "ASTM D698", "Ea", 0, 265.0),
+        ("Laboratory Testing Program", "Shelby Tubes", "Extrude", "Ea", 0, 65.0),
+        ("Laboratory Testing Program", "pH", "G51", "Ea", 0, 20.0),
+        ("Laboratory Testing Program", "Consolidation Test", "ASTM D2435", "Ea", 0, 1000.0),
+        ("Laboratory Testing Program", "Unit Weight Determination", "", "Ea", 0, 65.0),
+        ("Laboratory Testing Program", "Triaxial Permeability", "", "Ea", 0, 450.0),
+        ("Laboratory Testing Program", "California Bearing Ratio Test", "CBR", "Ea", 0, 300.0),
+        ("Laboratory Testing Program", "Unconfined Compressive Strength", "", "Ea", 0, 215.0),
+        ("Laboratory Testing Program", "Direct Shear Test", "", "Ea", 0, 500.0),
+        ("Engineering Analysis & Report Preparation", "Junior Professional", "", "hr", 2, 135.0),
+        ("Engineering Analysis & Report Preparation", "Intermediate Professional", "", "hr", 0, 185.0),
+        ("Engineering Analysis & Report Preparation", "Senior Professional", "", "hr", 0.5, 250.0),
+    ]
+    return [
+        CostLineItem(
+            section=section,
+            item=item,
+            description=description,
+            unit=unit,
+            estimate=estimate,
+            rate=rate,
+            total=round(estimate * rate, 2),
+        )
+        for section, item, description, unit, estimate, rate in rows
+    ]
+
+
+def merge_standard_cost_items(items: list[CostLineItem]) -> list[CostLineItem]:
+    merged = standard_cost_items()
+    positions = {clean_text(item.item).lower(): index for index, item in enumerate(merged)}
+    for item in items:
+        key = clean_text(item.item).lower()
+        if key in positions:
+            merged[positions[key]] = item
+        else:
+            merged.append(item)
+    return merged
+
+
 def as_number(value: object) -> float | None:
     if value is None or value == "":
         return None
@@ -113,4 +168,3 @@ def normalize_cost_items(items: list[CostLineItem | dict]) -> CostSummary:
 
 def format_money(value: float | None) -> str:
     return "$-" if value is None else f"${value:,.2f}"
-

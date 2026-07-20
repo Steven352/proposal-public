@@ -22,6 +22,10 @@ forwarded internally, identify the original external client contact and email ra
 Almor forwarding employee. Preserve exact quantities, units, investigation depths and cost values.
 Do not translate contractor or field-personnel hours into borehole or test-pit quantities.
 
+When boreholes or test pits have more than one termination depth, preserve every quantity/depth pair
+in borehole_program or test_pit_program. Use the legacy single quantity/depth fields only when there is
+one group. Never collapse multiple groups to the deepest value.
+
 Classify the project and investigation methods using plain professional terms. Put cost table rows in
 the four standard sections when possible. Leave genuinely missing optional fields empty and missing
 numeric fields null.
@@ -36,6 +40,16 @@ address, proposal number, project, quantities, depths or fees.
 
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
 borehole/test-pit quantities or depths from hours. Name only laboratory tests with non-zero quantities.
+Treat borehole_program and test_pit_program as authoritative over the legacy single-value fields.
+Preserve every quantity/depth group in the field-program wording.
+
+For boreholes, use the drilling module: track-mounted solid-stem auger wording, SPT at 1.5 m intervals
+where conditions permit, pocket penetrometer testing, sampling, logging, GPS, and drill-cuttings care.
+For test pits, use a distinct test-pit module: suitable excavator, excavation/logging, pocket
+penetrometer testing where possible, disturbed sampling, groundwater observations during excavation,
+GPS, and backfilling with excavated material. Do not use drilling, SPT, piezometer, or drill-cuttings
+wording for a test-pit-only program unless separately supported. When both programs are supplied,
+describe their quantity/depth groups separately.
 Keep standard clauses concise and consistent with the references. Do not produce headings because the
 Word assembler supplies them. field_program_paragraphs should contain the ordered scope content; use
 style=list for actual scope list items and style=body for lead-ins or closing field-program paragraphs.

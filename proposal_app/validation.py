@@ -17,19 +17,18 @@ def validate_facts(facts: ProposalFacts) -> list[str]:
 
     methods = {method.lower() for method in facts.investigation_methods}
     if "drilling" in methods:
-        if facts.borehole_quantity is None:
-            missing.append("Borehole quantity")
-        if facts.borehole_depth_m is None:
-            missing.append("Borehole termination depth")
+        if not facts.borehole_program and (
+            facts.borehole_quantity is None or facts.borehole_depth_m is None
+        ):
+            missing.append("Borehole quantity/depth program")
     if "test pits" in methods:
-        if facts.test_pit_quantity is None:
-            missing.append("Test-pit quantity")
-        if facts.test_pit_depth_m is None:
-            missing.append("Test-pit termination depth")
+        if not facts.test_pit_program and (
+            facts.test_pit_quantity is None or facts.test_pit_depth_m is None
+        ):
+            missing.append("Test-pit quantity/depth program")
 
     summary = normalize_cost_items(facts.cost_items)
     if not summary.items:
         missing.append("Cost table")
     missing.extend(summary.warnings)
     return missing
-

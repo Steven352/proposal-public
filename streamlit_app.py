@@ -14,6 +14,12 @@ from proposal_app.config import (
     KNOWLEDGE_INDEX,
     RULES_PATH,
 )
+from proposal_app.costs import (
+    as_number,
+    merge_standard_cost_items,
+    normalize_cost_items,
+    standard_cost_items,
+)
 from proposal_app.document_builder import build_docx
 from proposal_app.file_ingest import UploadedDocument
 from proposal_app.github_library import (
@@ -24,6 +30,12 @@ from proposal_app.github_library import (
     sync_runtime_knowledge,
 )
 from proposal_app.knowledge import choose_template, load_index, retrieve_references
+from proposal_app.investigation import (
+    format_investigation_program,
+    infer_methods_from_cost_items,
+    legacy_program,
+    parse_investigation_program,
+)
 from proposal_app.models import CostLineItem, ProposalFacts, RevisionAnalysis
 from proposal_app.pdf_builder import build_pdf_package
 from proposal_app.revision_learning import (
@@ -141,22 +153,27 @@ def initial_facts(proposal_number: str) -> ProposalFacts:
     return ProposalFacts(
         proposal_number=proposal_number.strip(),
         proposal_date=date.today().isoformat(),
+        cost_items=standard_cost_items(),
     )
 
 
 def cost_dataframe(facts: ProposalFacts) -> pd.DataFrame:
-    rows = [
-        {
-            "Section": item.section,
-            "Item": item.item,
-            "Description": item.description,
-            "Unit": item.unit,
-            "Est.": item.estimate,
-            "Rate": item.rate,
-            "Total": item.total,
-        }
-        for item in facts.cost_items
-    ]
+    rows = []
+    for item in facts.cost_items:
+        estimate = as_number(item.estimate)
+        rate = as_number(item.rate)
+        total = estimate * rate if estimate is not None and rate is not None else None
+        rows.append(
+            {
+                "Section": item.section,
+                "Item": item.item,
+                "Description": item.description,
+                "Unit": item.unit,
+                "Est.": estimate,
+                "Rate": rate,
+                "Total": total,
+            }
+        )
     return pd.DataFrame(
         rows,
         columns=["Section", "Item", "Description", "Unit", "Est.", "Rate", "Total"],
@@ -168,21 +185,49 @@ def dataframe_costs(frame: pd.DataFrame) -> list[CostLineItem]:
     for row in frame.fillna("").to_dict(orient="records"):
         if not any(str(value).strip() for value in row.values()):
             continue
+        estimate = as_number(row.get("Est."))
+        rate = as_number(row.get("Rate"))
+        total = estimate * rate if estimate is not None and rate is not None else None
         items.append(
             CostLineItem(
                 section=str(row.get("Section", "")),
                 item=str(row.get("Item", "")),
                 description=str(row.get("Description", "")),
                 unit=str(row.get("Unit", "")),
-                estimate=row.get("Est.") or None,
-                rate=row.get("Rate") or None,
-                total=row.get("Total") or None,
+                estimate=estimate,
+                rate=rate,
+                total=total,
             )
         )
     return items
 
 
+def recalculate_cost_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    updated = frame.copy()
+    updated["Total"] = [
+        (as_number(estimate) or 0.0) * (as_number(rate) or 0.0)
+        for estimate, rate in zip(updated["Est."], updated["Rate"], strict=True)
+    ]
+    return updated
+
+
 def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> ProposalFacts:
+    borehole_program, borehole_errors = parse_investigation_program(
+        st.session_state.edit_borehole_program,
+        "borehole",
+    )
+    test_pit_program, test_pit_errors = parse_investigation_program(
+        st.session_state.edit_test_pit_program,
+        "test pit",
+    )
+    st.session_state.scope_program_errors = borehole_errors + test_pit_errors
+    cost_items = dataframe_costs(edited_costs)
+    methods = set(st.session_state.edit_methods)
+    if borehole_program:
+        methods.add("drilling")
+    if test_pit_program:
+        methods.add("test pits")
+    methods.update(infer_methods_from_cost_items(cost_items))
     return ProposalFacts(
         proposal_number=st.session_state.edit_proposal_number.strip(),
         proposal_date=st.session_state.edit_proposal_date.isoformat(),
@@ -197,22 +242,36 @@ def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> Pro
         development_description=st.session_state.edit_development_description.strip(),
         project_type=st.session_state.edit_project_type.strip(),
         requested_services=[x.strip() for x in st.session_state.edit_requested_services.splitlines() if x.strip()],
-        investigation_methods=list(st.session_state.edit_methods),
-        borehole_quantity=st.session_state.edit_borehole_quantity,
-        borehole_depth_m=st.session_state.edit_borehole_depth,
-        test_pit_quantity=st.session_state.edit_test_pit_quantity,
-        test_pit_depth_m=st.session_state.edit_test_pit_depth,
+        investigation_methods=sorted(methods),
+        borehole_program=borehole_program,
+        test_pit_program=test_pit_program,
+        borehole_quantity=borehole_program[0].quantity if len(borehole_program) == 1 else None,
+        borehole_depth_m=(
+            borehole_program[0].termination_depth_m if len(borehole_program) == 1 else None
+        ),
+        test_pit_quantity=test_pit_program[0].quantity if len(test_pit_program) == 1 else None,
+        test_pit_depth_m=(
+            test_pit_program[0].termination_depth_m if len(test_pit_program) == 1 else None
+        ),
         access_notes=st.session_state.edit_access_notes.strip(),
         utility_locate_notes=st.session_state.edit_locate_notes.strip(),
         groundwater_notes=st.session_state.edit_groundwater_notes.strip(),
         laboratory_tests=[x.strip() for x in st.session_state.edit_lab_tests.splitlines() if x.strip()],
         reporting_requirements=[x.strip() for x in st.session_state.edit_reporting.splitlines() if x.strip()],
         other_notes=st.session_state.edit_other_notes.strip(),
-        cost_items=dataframe_costs(edited_costs),
+        cost_items=cost_items,
     )
 
 
 def initialize_editor(facts: ProposalFacts) -> None:
+    borehole_program = facts.borehole_program or legacy_program(
+        facts.borehole_quantity,
+        facts.borehole_depth_m,
+    )
+    test_pit_program = facts.test_pit_program or legacy_program(
+        facts.test_pit_quantity,
+        facts.test_pit_depth_m,
+    )
     defaults = {
         "edit_proposal_number": facts.proposal_number,
         "edit_proposal_date": date.fromisoformat(facts.proposal_date),
@@ -228,10 +287,8 @@ def initialize_editor(facts: ProposalFacts) -> None:
         "edit_project_type": facts.project_type,
         "edit_requested_services": "\n".join(facts.requested_services),
         "edit_methods": facts.investigation_methods,
-        "edit_borehole_quantity": facts.borehole_quantity,
-        "edit_borehole_depth": facts.borehole_depth_m,
-        "edit_test_pit_quantity": facts.test_pit_quantity,
-        "edit_test_pit_depth": facts.test_pit_depth_m,
+        "edit_borehole_program": format_investigation_program(borehole_program, "borehole"),
+        "edit_test_pit_program": format_investigation_program(test_pit_program, "test pit"),
         "edit_access_notes": facts.access_notes,
         "edit_locate_notes": facts.utility_locate_notes,
         "edit_groundwater_notes": facts.groundwater_notes,
@@ -241,7 +298,10 @@ def initialize_editor(facts: ProposalFacts) -> None:
     }
     for key, value in defaults.items():
         st.session_state[key] = value
-    st.session_state.cost_frame = cost_dataframe(facts)
+    facts_with_catalog = facts.model_copy(
+        update={"cost_items": merge_standard_cost_items(facts.cost_items)}
+    )
+    st.session_state.cost_frame = cost_dataframe(facts_with_catalog)
 
 
 st.title("Almor Proposal Builder")
@@ -332,15 +392,25 @@ if "proposal_facts" in st.session_state:
             ["drilling", "test pits", "hand auger", "groundwater monitoring", "coring", "laboratory testing"],
             key="edit_methods",
         )
-        q1, q2, q3, q4 = st.columns(4)
+        st.caption(
+            "Enter one quantity/depth group per line. These entries automatically enable drilling "
+            "or test-pit wording; quantities are never inferred from cost-table hours."
+        )
+        q1, q2 = st.columns(2)
         with q1:
-            st.number_input("Boreholes", min_value=0, step=1, value=None, key="edit_borehole_quantity")
+            st.text_area(
+                "Borehole program",
+                key="edit_borehole_program",
+                height=110,
+                placeholder="5 boreholes to 5 m\n3 boreholes to 6 m",
+            )
         with q2:
-            st.number_input("Borehole depth (m)", min_value=0.0, step=0.5, value=None, key="edit_borehole_depth")
-        with q3:
-            st.number_input("Test pits", min_value=0, step=1, value=None, key="edit_test_pit_quantity")
-        with q4:
-            st.number_input("Test-pit depth (m)", min_value=0.0, step=0.5, value=None, key="edit_test_pit_depth")
+            st.text_area(
+                "Test-pit program",
+                key="edit_test_pit_program",
+                height=110,
+                placeholder="4 test pits to 3 m",
+            )
         st.text_area("Requested services (one per line)", key="edit_requested_services", height=110)
         st.text_area("Laboratory tests (one per line)", key="edit_lab_tests", height=110)
         st.text_area("Reporting requirements (one per line)", key="edit_reporting", height=110)
@@ -350,8 +420,11 @@ if "proposal_facts" in st.session_state:
         st.text_area("Other notes", key="edit_other_notes", height=90)
 
     with cost_tab:
-        st.caption("Zero or blank quantities are removed. Rates and totals are checked before generation.")
-        edited_costs = st.data_editor(
+        st.caption(
+            "Edit the standard estimate below. Total is calculated automatically from Est. × Rate. "
+            "Zero or blank quantities stay in this editor but are removed from the Word proposal."
+        )
+        edited_costs = recalculate_cost_frame(st.data_editor(
             st.session_state.cost_frame,
             num_rows="dynamic",
             width="stretch",
@@ -366,17 +439,29 @@ if "proposal_facts" in st.session_state:
                     ],
                     required=True,
                 ),
+                "Unit": st.column_config.SelectboxColumn(
+                    options=["hr", "LS", "Ea"],
+                    required=True,
+                    help="Every line item can be changed to hourly, lump sum, or each.",
+                ),
                 "Est.": st.column_config.NumberColumn(min_value=0.0),
                 "Rate": st.column_config.NumberColumn(min_value=0.0, format="$%.2f"),
                 "Total": st.column_config.NumberColumn(min_value=0.0, format="$%.2f"),
             },
             key="cost_editor",
-        )
+            disabled=["Total"],
+        ))
+        preview = normalize_cost_items(dataframe_costs(edited_costs))
+        subtotal_columns = st.columns(4)
+        for column, section in zip(subtotal_columns, preview.section_totals, strict=True):
+            with column:
+                st.metric(section, f"${preview.section_totals[section]:,.2f}")
+        st.metric("Estimated Cost", f"${preview.final_total:,.2f}")
 
     facts = facts_from_editor(current, edited_costs)
     st.session_state.proposal_facts = facts.model_dump(mode="json")
     st.session_state.cost_frame = edited_costs
-    missing = validate_facts(facts)
+    missing = st.session_state.get("scope_program_errors", []) + validate_facts(facts)
     if missing:
         st.warning("Please resolve before generating: " + "; ".join(missing))
 

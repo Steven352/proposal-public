@@ -38,6 +38,14 @@ def load_index(
 
 
 def build_query(facts: ProposalFacts) -> str:
+    borehole_program = " ".join(
+        f"{group.quantity} boreholes {group.termination_depth_m:g} m"
+        for group in facts.borehole_program
+    )
+    test_pit_program = " ".join(
+        f"{group.quantity} test pits {group.termination_depth_m:g} m"
+        for group in facts.test_pit_program
+    )
     fields = [
         facts.project_name,
         facts.project_location,
@@ -48,6 +56,8 @@ def build_query(facts: ProposalFacts) -> str:
         " ".join(facts.laboratory_tests),
         " ".join(facts.reporting_requirements),
         facts.other_notes,
+        borehole_program,
+        test_pit_program,
     ]
     return " ".join(field for field in fields if field)
 
@@ -56,6 +66,8 @@ def retrieve_references(facts: ProposalFacts, limit: int = 5) -> list[ReferenceM
     query_tokens = tokenize(build_query(facts))
     query_methods = {method.lower() for method in facts.investigation_methods}
     project_type = facts.project_type.lower().strip()
+    primary_methods = {"drilling", "test pits", "hand auger", "coring"}
+    query_primary_methods = query_methods & primary_methods
     matches: list[ReferenceMatch] = []
 
     for proposal in load_index():
@@ -73,6 +85,15 @@ def retrieve_references(facts: ProposalFacts, limit: int = 5) -> list[ReferenceM
 
         methods = {method.lower() for method in proposal.get("methods", [])}
         score += 2.5 * len(query_methods & methods)
+        candidate_primary_methods = methods & primary_methods
+        if query_primary_methods:
+            if candidate_primary_methods == query_primary_methods:
+                score += 8.0
+            elif query_primary_methods.issubset(candidate_primary_methods):
+                score += 2.0
+                score -= 3.0 * len(candidate_primary_methods - query_primary_methods)
+            else:
+                score -= 3.0 * len(query_primary_methods - candidate_primary_methods)
         if proposal.get("proposal_number", "").startswith("P026-1"):
             score += 0.5
         if proposal.get("has_cost_table"):
