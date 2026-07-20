@@ -78,3 +78,15 @@ class ReferenceMatch(BaseModel):
     has_cost_table: bool
     sections: dict[str, str]
 
+
+class RuleCandidate(BaseModel):
+    key: str
+    category: str = "wording"
+    instruction: str
+    reusable: bool = True
+    rationale: str = ""
+
+
+class RevisionAnalysis(BaseModel):
+    summary: str
+    candidates: list[RuleCandidate] = Field(default_factory=list)

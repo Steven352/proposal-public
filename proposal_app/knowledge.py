@@ -5,7 +5,7 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
-from .config import HISTORICAL_DIR, KNOWLEDGE_INDEX
+from .config import HISTORICAL_DIR, KNOWLEDGE_INDEX, LIBRARY_INDEX_ADDITIONS
 from .models import ProposalFacts, ReferenceMatch
 
 
@@ -16,13 +16,25 @@ def tokenize(text: str) -> set[str]:
     return {token for token in TOKEN_RE.findall(text.lower()) if len(token) > 2}
 
 
-@lru_cache(maxsize=1)
-def load_index(path: Path = KNOWLEDGE_INDEX) -> list[dict]:
+@lru_cache(maxsize=4)
+def load_index(
+    path: Path = KNOWLEDGE_INDEX,
+    additions_path: Path = LIBRARY_INDEX_ADDITIONS,
+) -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(
             f"Proposal knowledge index not found at {path}. Run scripts/build_knowledge.py."
         )
-    return json.loads(path.read_text(encoding="utf-8"))["proposals"]
+    base = json.loads(path.read_text(encoding="utf-8"))["proposals"]
+    additions: list[dict] = []
+    if additions_path.exists():
+        additions = json.loads(additions_path.read_text(encoding="utf-8")).get("proposals", [])
+
+    merged: dict[str, dict] = {}
+    for proposal in [*base, *additions]:
+        key = proposal.get("proposal_number") or proposal["filename"]
+        merged[key.upper()] = proposal
+    return list(merged.values())
 
 
 def build_query(facts: ProposalFacts) -> str:
@@ -107,4 +119,3 @@ def reference_context(matches: list[ReferenceMatch], max_chars: int = 30_000) ->
         parts.append(block)
         used += len(block)
     return "\n\n".join(parts)
-

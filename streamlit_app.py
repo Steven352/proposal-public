@@ -16,9 +16,22 @@ from proposal_app.config import (
 )
 from proposal_app.document_builder import build_docx
 from proposal_app.file_ingest import UploadedDocument
+from proposal_app.github_library import (
+    GitHubLibrary,
+    add_final_to_library,
+    approve_rules,
+    empty_state,
+    sync_runtime_knowledge,
+)
 from proposal_app.knowledge import choose_template, load_index, retrieve_references
-from proposal_app.models import CostLineItem, ProposalFacts
+from proposal_app.models import CostLineItem, ProposalFacts, RevisionAnalysis
 from proposal_app.pdf_builder import build_pdf_package
+from proposal_app.revision_learning import (
+    aggregate_rule_candidates,
+    compare_docx,
+    proposal_index_record,
+    revision_record,
+)
 from proposal_app.secure_bundle import ensure_private_assets, is_public_deployment
 from proposal_app.validation import validate_facts
 
@@ -91,6 +104,30 @@ def api_client() -> ProposalAI:
         extraction_model=secret("OPENAI_EXTRACTION_MODEL", DEFAULT_EXTRACTION_MODEL),
         draft_model=secret("OPENAI_DRAFT_MODEL", legacy_model or DEFAULT_DRAFT_MODEL),
     )
+
+
+@st.cache_resource
+def cached_library_client(token: str, repository: str, branch: str) -> GitHubLibrary:
+    return GitHubLibrary(token=token, repository=repository, branch=branch)
+
+
+def library_client() -> GitHubLibrary | None:
+    token = secret("GITHUB_LIBRARY_TOKEN")
+    repository = secret("GITHUB_LIBRARY_REPO", "Steven352/proposal")
+    branch = secret("GITHUB_LIBRARY_BRANCH", "main")
+    if not token:
+        return None
+    return cached_library_client(token, repository, branch)
+
+
+library = library_client()
+if library and not st.session_state.get("library_synced"):
+    try:
+        sync_runtime_knowledge(library)
+        load_index.cache_clear()
+        st.session_state.library_synced = True
+    except Exception as error:
+        st.session_state.library_sync_error = str(error)
 
 
 def uploaded_documents(files) -> list[UploadedDocument]:
@@ -214,7 +251,8 @@ with st.expander("How it works", expanded=False):
     st.write(
         "Paste or upload the request, verify the extracted project and cost information, then generate "
         "a complete Word proposal, a compact authorization PDF, and the client email draft. Uploaded "
-        "files are processed for the current session and are not saved by this app."
+        "request files are processed for the current session. Only a reviewed Final Proposal that you "
+        "explicitly confirm is saved to the private proposal library."
     )
 
 st.subheader("1. Add the request")
@@ -412,12 +450,135 @@ if "generated_outputs" in st.session_state:
     st.text_input("Subject", value=output["email_subject"])
     st.text_area("Message", value=output["email_body"], height=220)
 
-with st.sidebar:
-    st.write("Private proposal workspace")
-    st.caption(f"Knowledge base: {len(load_index())} historical geotechnical proposals")
-    st.caption(
-        f"Extraction model: {secret('OPENAI_EXTRACTION_MODEL', DEFAULT_EXTRACTION_MODEL)}"
+st.divider()
+st.subheader("4. Add Final Proposal to Library")
+st.caption(
+    "Add only a reviewed Final Word proposal. The app privately records its differences from the AI "
+    "draft; a repeated change must occur in at least 3 final proposals and still requires your approval "
+    "before it becomes a drafting rule."
+)
+
+generated = st.session_state.get("generated_outputs")
+draft_upload = None
+if generated:
+    st.info(f"AI draft selected: {generated['docx_name']}")
+else:
+    draft_upload = st.file_uploader(
+        "AI draft Word file *",
+        type=["docx"],
+        key="library_draft_upload",
+        help="Generate a proposal in this session or upload the original AI draft that was reviewed.",
     )
+
+final_upload = st.file_uploader(
+    "Reviewed Final Proposal Word file *",
+    type=["docx"],
+    key="library_final_upload",
+)
+final_confirmed = st.checkbox(
+    "I confirm this is the reviewed Final Proposal approved for the proposal library.",
+    key="library_final_confirmed",
+)
+add_final_clicked = st.button(
+    "Add Final Proposal to Library",
+    width="stretch",
+    disabled=not final_confirmed,
+)
+
+if add_final_clicked:
+    if library is None:
+        st.error(
+            "Private library storage is not configured. Add GITHUB_LIBRARY_TOKEN and "
+            "GITHUB_LIBRARY_REPO in Streamlit Secrets."
+        )
+    elif final_upload is None:
+        st.error("Upload the reviewed Final Proposal Word file.")
+    elif not generated and draft_upload is None:
+        st.error("Generate a proposal in this session or upload its original AI draft Word file.")
+    else:
+        try:
+            draft_bytes = generated["docx"] if generated else draft_upload.getvalue()
+            final_bytes = final_upload.getvalue()
+            draft_name = generated["docx_name"] if generated else draft_upload.name
+            draft_index = proposal_index_record(draft_bytes, draft_name)
+            final_index = proposal_index_record(final_bytes, final_upload.name)
+            final_number = final_index.get("proposal_number", "")
+            if "P026-133" in final_upload.name.upper() or final_number == "P026-133":
+                raise ValueError("P026-133 is excluded and cannot be added to the proposal library.")
+            final_corpus = " ".join(final_index.get("sections", {}).values()).lower()
+            if "geotechnical" not in final_corpus:
+                raise ValueError("Only reviewed geotechnical proposals can be added to this library.")
+            draft_number = draft_index.get("proposal_number", "")
+            if draft_number and final_number and draft_number != final_number:
+                raise ValueError(
+                    f"The AI draft is {draft_number}, but the Final Proposal is {final_number}."
+                )
+
+            with st.spinner("Comparing the AI draft with the reviewed Final Proposal..."):
+                comparison = compare_docx(draft_bytes, final_bytes)
+                if comparison["differences"]:
+                    analysis = api_client().analyze_revisions(comparison["differences"])
+                else:
+                    analysis = RevisionAnalysis(
+                        summary="The reviewed Final Proposal matches the AI draft.", candidates=[]
+                    )
+                number = final_number or (
+                    st.session_state.get("proposal_facts", {}).get("proposal_number", "")
+                )
+                provisional_path = f"data/historical_proposals/{final_upload.name}"
+                record = revision_record(
+                    proposal_number=number,
+                    final_filename=final_upload.name,
+                    repository_path=provisional_path,
+                    comparison=comparison,
+                    analysis=analysis,
+                )
+                _, state, repository_path = add_final_to_library(
+                    client=library,
+                    final_filename=final_upload.name,
+                    final_bytes=final_bytes,
+                    index_record=final_index,
+                    revision_record=record,
+                )
+            load_index.cache_clear()
+            st.session_state.library_state = state
+            st.success(f"Added to the private proposal library: {repository_path}")
+            st.write(analysis.summary)
+            st.caption(f"Draft/final similarity: {comparison['similarity']:.1%}")
+        except Exception as error:
+            st.error(f"The Final Proposal was not fully added: {error}")
+
+st.subheader("Repeated edits awaiting rule approval")
+if library is None:
     st.caption(
-        f"Draft model: {secret('OPENAI_DRAFT_MODEL', secret('OPENAI_MODEL', DEFAULT_DRAFT_MODEL))}"
+        "Configure the private GitHub library connection to save Final Proposals and review repeated edits."
     )
+else:
+    try:
+        if "library_state" not in st.session_state:
+            st.session_state.library_state = library.read_json(
+                "knowledge/library_state.json", empty_state()
+            )
+        ready_candidates = aggregate_rule_candidates(st.session_state.library_state)
+        if not ready_candidates:
+            st.caption("No repeated rule candidate has reached 3 reviewed Final Proposals yet.")
+        else:
+            selected_keys: list[str] = []
+            for candidate in ready_candidates:
+                checked = st.checkbox(
+                    f"{candidate['instruction']} ({candidate['occurrences']} proposals)",
+                    key=f"approve_rule_{candidate['key']}",
+                )
+                if checked:
+                    selected_keys.append(candidate["key"])
+            if st.button(
+                "Approve selected rules",
+                disabled=not selected_keys,
+                width="stretch",
+            ):
+                state, _ = approve_rules(library, selected_keys)
+                st.session_state.library_state = state
+                st.success("Selected rules are now part of the approved drafting rules.")
+                st.rerun()
+    except Exception as error:
+        st.warning(f"Could not load the private rule-review queue: {error}")

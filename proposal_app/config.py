@@ -9,6 +9,8 @@ HISTORICAL_DIR = DATA_DIR / "historical_proposals"
 ASSET_DIR = DATA_DIR / "assets"
 KNOWLEDGE_DIR = ROOT_DIR / "knowledge"
 KNOWLEDGE_INDEX = KNOWLEDGE_DIR / "proposal_index.json"
+LIBRARY_INDEX_ADDITIONS = KNOWLEDGE_DIR / "library_additions.json"
+LEARNED_RULES_PATH = KNOWLEDGE_DIR / "learned_rules.md"
 RULES_PATH = KNOWLEDGE_DIR / "rules.md"
 
 STANDARD_TERMS_PATH = ASSET_DIR / "standard_terms.pdf"
