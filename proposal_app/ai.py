@@ -38,6 +38,16 @@ Use the current proposal facts and cost table as the only authority for project-
 historical proposal excerpts are controlled writing examples; never copy their client, contact,
 address, proposal number, project, quantities, depths or fees.
 
+Treat the selected template's scope-of-work wording as controlled copy, not as material to improve or
+paraphrase. If wording is factually correct and applicable, reproduce it unchanged, preserving its
+sentence structure, terminology, level of detail, bullet order, and Steven Lai writing style. Make
+only the minimum edits required to replace project-specific facts or remove an unsupported clause.
+Prefer precise word or phrase substitutions over rewriting a sentence. Do not modernize, simplify,
+condense, expand, polish, or vary wording merely for style. User-provided or user-approved scope text
+has priority over historical excerpts and must be preserved verbatim except for an explicitly required
+factual correction. When a clause is not applicable, omit that clause instead of rewriting adjacent
+clauses. Minimum necessary change is the governing rule.
+
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
 borehole/test-pit quantities or depths from hours. Name only laboratory tests with non-zero quantities.
 Treat borehole_program and test_pit_program as authoritative over the legacy single-value fields.
