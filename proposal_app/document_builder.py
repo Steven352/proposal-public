@@ -145,6 +145,15 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
     old_number = old_number_match.group(0) if old_number_match else ""
     old_client = preceding[1].text.splitlines()[0].strip() if len(preceding) > 1 else ""
     old_project = preceding[4].text.splitlines()[-1].strip() if len(preceding) > 4 else ""
+    old_location = next(
+        (
+            line.strip().lstrip("\t")
+            for paragraph in preceding[5:]
+            for line in paragraph.text.splitlines()
+            if line.strip()
+        ),
+        "",
+    )
 
     set_paragraph_text(
         preceding[0],
@@ -176,6 +185,7 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         "old_number": old_number,
         "old_client": old_client,
         "old_project": old_project,
+        "old_location": old_location,
     }
 
 
@@ -302,23 +312,85 @@ def patch_package_text(docx_bytes: bytes, replacements: dict[str, str]) -> bytes
                         text_nodes = paragraph.xpath(".//w:t", namespaces={"w": W_NS})
                         if not text_nodes:
                             continue
-                        combined = "".join(node.text or "" for node in text_nodes)
-                        updated = combined
                         for old, new in replacements.items():
-                            if old:
-                                updated = updated.replace(old, new)
-                        if updated != combined:
-                            text_nodes[0].text = updated
-                            text_nodes[0].set(XML_SPACE, "preserve")
-                            for node in text_nodes[1:]:
-                                node.text = ""
-                            changed = True
+                            if old and replace_text_across_nodes(text_nodes, old, new):
+                                changed = True
                     if changed:
                         data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
                 except etree.XMLSyntaxError:
                     pass
             zout.writestr(item, data)
     return target.getvalue()
+
+
+def replace_text_across_nodes(text_nodes: list, old: str, new: str) -> bool:
+    """Replace text without collapsing the template's separately formatted runs."""
+    changed = False
+    while True:
+        values = [node.text or "" for node in text_nodes]
+        combined = "".join(values)
+        start = combined.rfind(old)
+        if start < 0:
+            return changed
+        end = start + len(old)
+
+        offsets = []
+        cursor = 0
+        for value in values:
+            offsets.append((cursor, cursor + len(value)))
+            cursor += len(value)
+
+        start_index = next(
+            index for index, (_, node_end) in enumerate(offsets) if start < node_end
+        )
+        end_index = next(
+            index for index, (_, node_end) in enumerate(offsets) if end <= node_end
+        )
+        start_offset = start - offsets[start_index][0]
+        end_offset = end - offsets[end_index][0]
+
+        prefix = values[start_index][:start_offset]
+        suffix = values[end_index][end_offset:]
+        text_nodes[start_index].text = prefix + new + (suffix if start_index == end_index else "")
+        text_nodes[start_index].set(XML_SPACE, "preserve")
+        if start_index != end_index:
+            for index in range(start_index + 1, end_index):
+                text_nodes[index].text = ""
+            text_nodes[end_index].text = suffix
+            if suffix:
+                text_nodes[end_index].set(XML_SPACE, "preserve")
+        changed = True
+
+
+def find_header_location_replacements(
+    docx_bytes: bytes,
+    old_location: str,
+    old_client: str,
+    new_location: str,
+) -> dict[str, str]:
+    """Locate the template's visible header location slot without rebuilding its text box."""
+    if not old_location or not new_location:
+        return {}
+    replacements: dict[str, str] = {}
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as archive:
+        for name in archive.namelist():
+            if not name.startswith("word/header") or not name.endswith(".xml"):
+                continue
+            root = etree.fromstring(archive.read(name))
+            for paragraph in root.xpath(
+                ".//w:p[not(.//w:p)]",
+                namespaces={"w": W_NS},
+            ):
+                text = "".join(
+                    paragraph.xpath(".//w:t/text()", namespaces={"w": W_NS})
+                ).strip()
+                if (
+                    old_location.casefold() in text.casefold()
+                    and not (old_client and old_client.casefold() in text.casefold())
+                    and "Almor Proposal No." not in text
+                ):
+                    replacements[text] = new_location
+    return replacements
 
 
 def build_docx(
@@ -363,12 +435,23 @@ def build_docx(
 
     buffer = io.BytesIO()
     document.save(buffer)
+    saved_bytes = buffer.getvalue()
+    header_location = ", ".join(
+        line.strip() for line in facts.project_location.splitlines() if line.strip()
+    )
     replacements = {
         old_values["old_number"]: facts.proposal_number,
         old_values["old_client"]: facts.client_name,
         old_values["old_project"]: facts.project_name,
         "Steven Lai, E.I.T.": PREPARED_BY,
     }
-    result = patch_package_text(buffer.getvalue(), replacements)
+    replacements.update(
+        find_header_location_replacements(
+            saved_bytes,
+            old_values["old_location"],
+            old_values["old_client"],
+            header_location,
+        )
+    )
+    result = patch_package_text(saved_bytes, replacements)
     return result, output_stem(facts) + ".docx"
-
