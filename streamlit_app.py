@@ -321,6 +321,11 @@ def facts_from_editor(
 
 
 def initialize_editor(facts: ProposalFacts) -> None:
+    # A data editor keeps its own row/cell patch state under its widget key.
+    # Clear that state only when loading a different proposal; changing the
+    # editor's source frame on every rerun makes the first edit appear lost.
+    st.session_state.pop("scope_editor", None)
+    st.session_state.pop("cost_editor", None)
     borehole_program = facts.borehole_program or legacy_program(
         facts.borehole_quantity,
         facts.borehole_depth_m,
@@ -528,8 +533,6 @@ if "proposal_facts" in st.session_state:
 
     facts = facts_from_editor(current, edited_costs, edited_scope)
     st.session_state.proposal_facts = facts.model_dump(mode="json")
-    st.session_state.cost_frame = edited_costs
-    st.session_state.scope_frame = edited_scope
     missing = st.session_state.get("scope_program_errors", []) + validate_facts(facts)
     if missing:
         st.warning("Please resolve before generating: " + "; ".join(missing))
