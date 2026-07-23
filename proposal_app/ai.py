@@ -38,15 +38,18 @@ Use the current proposal facts and cost table as the only authority for project-
 historical proposal excerpts are controlled writing examples; never copy their client, contact,
 address, proposal number, project, quantities, depths or fees.
 
-Treat the selected template's scope-of-work wording as controlled copy, not as material to improve or
-paraphrase. If wording is factually correct and applicable, reproduce it unchanged, preserving its
-sentence structure, terminology, level of detail, bullet order, and Steven Lai writing style. Make
-only the minimum edits required to replace project-specific facts or remove an unsupported clause.
-Prefer precise word or phrase substitutions over rewriting a sentence. Do not modernize, simplify,
-condense, expand, polish, or vary wording merely for style. User-provided or user-approved scope text
-has priority over historical excerpts and must be preserved verbatim except for an explicitly required
-factual correction. When a clause is not applicable, omit that clause instead of rewriting adjacent
-clauses. Minimum necessary change is the governing rule.
+Reference 1 is the controlling Word template. Treat every part of it as controlled copy, including
+the introduction, personnel, scope, cost-section lead-in, fee wording, terms, closure, headings,
+paragraph order, bullet order, and level of detail. It is not material to improve or paraphrase. If
+wording is factually correct and applicable, reproduce it unchanged. Make only the minimum edits
+required to replace project-specific facts, correct a factual conflict, update quantities or fees, or
+remove a wholly unsupported clause. Prefer exact word, number, or short-phrase substitutions over
+rewriting a sentence. Do not modernize, simplify, condense, expand, polish, reorganize, merge, split,
+or vary wording merely for style. Do not mix alternate wording from References 2 or 3 into the
+controlling template. User-provided or user-approved text has priority and must be preserved verbatim
+except for an explicitly required factual correction. When a clause is not applicable, omit that
+clause without rewriting adjacent clauses. Minimum necessary change is the governing rule for the
+entire proposal, not only the scope of work.
 
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
 borehole/test-pit quantities or depths from hours. Name only laboratory tests with non-zero quantities.
@@ -60,9 +63,12 @@ penetrometer testing where possible, disturbed sampling, groundwater observation
 GPS, and backfilling with excavated material. Do not use drilling, SPT, piezometer, or drill-cuttings
 wording for a test-pit-only program unless separately supported. When both programs are supplied,
 describe their quantity/depth groups separately.
-Keep standard clauses concise and consistent with the references. Do not produce headings because the
-Word assembler supplies them. field_program_paragraphs should contain the ordered scope content; use
-style=list for actual scope list items and style=body for lead-ins or closing field-program paragraphs.
+Keep the controlling template's exact standard clauses and structure. Do not produce headings because
+the Word assembler supplies them. field_program_paragraphs should preserve the controlling template's
+paragraph and bullet order; use style=list for its actual list items and style=body for its existing
+lead-ins or closing field-program paragraphs. cost_intro, terms_and_conditions, closure_paragraph_1,
+and closure_paragraph_2 must copy the corresponding controlling-template wording verbatim unless a
+specific current-project fact makes the smallest possible correction necessary.
 
 The email must be short, use the external client email in the To line, include the proposal number and
 project name in the subject, greet the client's first name, and ask the client to sign and return the

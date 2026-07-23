@@ -13,7 +13,7 @@ from docx.table import Table, _Row
 from docx.text.paragraph import Paragraph
 from lxml import etree
 
-from .config import PREPARED_BY, PREPARED_BY_TITLE, REVIEWED_BY, REVIEWED_BY_TITLE, SECTION_ORDER
+from .config import SECTION_ORDER
 from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
 
@@ -155,10 +155,11 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         "",
     )
 
-    set_paragraph_text(
-        preceding[0],
-        f"{format_date(facts.proposal_date)}\tAlmor Proposal No.: {facts.proposal_number}",
-    )
+    date_line_nodes = preceding[0]._p.xpath(".//w:t")
+    old_date = preceding[0].text.split("\t", 1)[0].strip()
+    replace_text_across_nodes(date_line_nodes, old_date, format_date(facts.proposal_date))
+    if old_number:
+        replace_text_across_nodes(date_line_nodes, old_number, facts.proposal_number)
     client_block = "\n".join(
         value for value in [facts.client_name, facts.client_address] if value.strip()
     )
@@ -265,37 +266,30 @@ def update_cost_section(
     if len(paragraphs) < 2:
         raise ValueError("Selected proposal cost section is incompatible.")
     set_paragraph_text(paragraphs[0], draft.cost_intro)
-    total_text = (
-        "The total estimated geotechnical engineering project services cost for this work is "
-        f"{format_money(final_total)}. The estimated cost includes all professional service fees, "
-        "surcharges, associated fees and is valid for a period of 60 days from the date on the "
-        "proposal. The estimated cost is based on the scope of work and assumptions described in "
-        "this document and is exclusive of GST and any other applicable taxes. Invoices would be "
-        "forwarded to the client monthly."
+    total_text, replacements = re.subn(
+        r"\$[\d,]+\.\d{2}",
+        format_money(final_total),
+        paragraphs[-1].text,
+        count=1,
     )
+    if replacements != 1:
+        raise ValueError("Selected proposal fee paragraph has no replaceable total.")
     set_paragraph_text(paragraphs[-1], total_text)
-    for paragraph in paragraphs[1:-1]:
-        paragraph._element.getparent().remove(paragraph._element)
 
 
-def update_closure(document: DocumentType, draft: DraftContent, facts: ProposalFacts) -> None:
+def update_closure(document: DocumentType, facts: ProposalFacts) -> None:
     paragraphs = paragraphs_between(document, "Closure", None)
     if len(paragraphs) < 8:
         raise ValueError("Selected proposal closure/signature block is incompatible.")
-    values = [
-        draft.closure_paragraph_1,
-        draft.closure_paragraph_2,
-        "Respectfully Submitted,",
-        "ALMOR TESTING SERVICES LTD.",
-        "Prepared by\t\t\t\t\t\t\tReviewed By",
-        f"{PREPARED_BY}\t\t\t\t \t           {REVIEWED_BY}",
-        f"{PREPARED_BY_TITLE}\t\t\t\t                       {REVIEWED_BY_TITLE}",
-        output_stem(facts),
-    ]
-    for paragraph, value in zip(paragraphs[:8], values, strict=True):
-        set_paragraph_text(paragraph, value)
-    for paragraph in paragraphs[8:]:
-        paragraph._element.getparent().remove(paragraph._element)
+    # Standard closure and signature wording is controlled by the template.
+    # Only the project-specific document identifier needs to change.
+    identifier = next(
+        (paragraph for paragraph in reversed(paragraphs) if paragraph.text.strip()),
+        None,
+    )
+    if identifier is None:
+        raise ValueError("Selected proposal signature block has no document identifier.")
+    set_paragraph_text(identifier, output_stem(facts))
 
 
 def patch_package_text(docx_bytes: bytes, replacements: dict[str, str]) -> bytes:
@@ -425,13 +419,9 @@ def build_docx(
     final_total = update_cost_table(cost_table, facts)
     update_cost_section(document, draft, facts, final_total)
 
-    terms_paragraphs = paragraphs_between(document, "Terms and Conditions", "Closure")
-    if not terms_paragraphs:
+    if not paragraphs_between(document, "Terms and Conditions", "Closure"):
         raise ValueError("Selected proposal terms section is incompatible.")
-    set_paragraph_text(terms_paragraphs[0], draft.terms_and_conditions)
-    for paragraph in terms_paragraphs[1:]:
-        paragraph._element.getparent().remove(paragraph._element)
-    update_closure(document, draft, facts)
+    update_closure(document, facts)
 
     buffer = io.BytesIO()
     document.save(buffer)
@@ -443,7 +433,6 @@ def build_docx(
         old_values["old_number"]: facts.proposal_number,
         old_values["old_client"]: facts.client_name,
         old_values["old_project"]: facts.project_name,
-        "Steven Lai, E.I.T.": PREPARED_BY,
     }
     replacements.update(
         find_header_location_replacements(

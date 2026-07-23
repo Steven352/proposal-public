@@ -565,7 +565,11 @@ if "proposal_facts" in st.session_state:
         try:
             with st.spinner("Writing and assembling the closest-matching geotechnical proposal..."):
                 ai = api_client()
-                draft = ai.draft_content(facts, references, RULES_PATH)
+                draft_references = sorted(
+                    references,
+                    key=lambda match: match.filename != selected_template.name,
+                )
+                draft = ai.draft_content(facts, draft_references, RULES_PATH)
                 docx_bytes, docx_name = build_docx(selected_template, facts, draft)
                 pdf_bytes, pdf_name = build_pdf_package(
                     docx_bytes,
