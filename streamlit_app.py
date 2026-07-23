@@ -157,6 +157,22 @@ def initial_facts(proposal_number: str) -> ProposalFacts:
     )
 
 
+def prepare_extracted_facts(facts: ProposalFacts) -> ProposalFacts:
+    """Keep project extraction, while leaving scope quantities and pricing for manual entry."""
+    return facts.model_copy(
+        update={
+            "proposal_date": facts.proposal_date or date.today().isoformat(),
+            "borehole_program": [],
+            "test_pit_program": [],
+            "borehole_quantity": None,
+            "borehole_depth_m": None,
+            "test_pit_quantity": None,
+            "test_pit_depth_m": None,
+            "cost_items": standard_cost_items(),
+        }
+    )
+
+
 def cost_dataframe(facts: ProposalFacts) -> pd.DataFrame:
     rows = []
     for item in facts.cost_items:
@@ -346,6 +362,7 @@ if analyze_clicked:
                     documents=uploaded_documents(request_files),
                     proposal_number=proposal_number,
                 )
+                facts = prepare_extracted_facts(facts)
             st.session_state.proposal_facts = facts.model_dump(mode="json")
             initialize_editor(facts)
             st.session_state.pop("generated_outputs", None)

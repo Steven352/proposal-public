@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class CostLineItem(BaseModel):
@@ -49,6 +49,17 @@ class ProposalFacts(BaseModel):
     reporting_requirements: list[str] = Field(default_factory=list)
     other_notes: str = ""
     cost_items: list[CostLineItem] = Field(default_factory=list)
+
+    @field_validator("proposal_date", mode="before")
+    @classmethod
+    def normalize_proposal_date(cls, value: object) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return date.today().isoformat()
+        try:
+            return date.fromisoformat(raw).isoformat()
+        except ValueError:
+            return date.today().isoformat()
 
 
 class ParagraphBlock(BaseModel):
