@@ -196,6 +196,42 @@ def cost_dataframe(facts: ProposalFacts) -> pd.DataFrame:
     )
 
 
+SCOPE_CATEGORIES = [
+    "Requested service",
+    "Laboratory test",
+    "Reporting requirement",
+    "Access note",
+    "Utility locate note",
+    "Groundwater note",
+]
+
+
+def scope_dataframe(facts: ProposalFacts) -> pd.DataFrame:
+    grouped = {
+        "Requested service": facts.requested_services,
+        "Laboratory test": facts.laboratory_tests,
+        "Reporting requirement": facts.reporting_requirements,
+        "Access note": [facts.access_notes] if facts.access_notes else [],
+        "Utility locate note": [facts.utility_locate_notes] if facts.utility_locate_notes else [],
+        "Groundwater note": [facts.groundwater_notes] if facts.groundwater_notes else [],
+    }
+    rows = []
+    for category in SCOPE_CATEGORIES:
+        values = grouped[category] or [""]
+        rows.extend({"Category": category, "Value": value} for value in values)
+    return pd.DataFrame(rows, columns=["Category", "Value"])
+
+
+def scope_values(frame: pd.DataFrame) -> dict[str, list[str]]:
+    values = {category: [] for category in SCOPE_CATEGORIES}
+    for row in frame.fillna("").to_dict(orient="records"):
+        category = str(row.get("Category", "")).strip()
+        value = str(row.get("Value", "")).strip()
+        if category in values and value:
+            values[category].append(value)
+    return values
+
+
 def dataframe_costs(frame: pd.DataFrame) -> list[CostLineItem]:
     items: list[CostLineItem] = []
     for row in frame.fillna("").to_dict(orient="records"):
@@ -227,7 +263,11 @@ def recalculate_cost_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return updated
 
 
-def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> ProposalFacts:
+def facts_from_editor(
+    current: ProposalFacts,
+    edited_costs: pd.DataFrame,
+    edited_scope: pd.DataFrame,
+) -> ProposalFacts:
     borehole_program, borehole_errors = parse_investigation_program(
         st.session_state.edit_borehole_program,
         "borehole",
@@ -238,6 +278,7 @@ def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> Pro
     )
     st.session_state.scope_program_errors = borehole_errors + test_pit_errors
     cost_items = dataframe_costs(edited_costs)
+    scope = scope_values(edited_scope)
     methods = set(st.session_state.edit_methods)
     if borehole_program:
         methods.add("drilling")
@@ -257,7 +298,7 @@ def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> Pro
         project_location=st.session_state.edit_project_location.strip(),
         development_description=st.session_state.edit_development_description.strip(),
         project_type=st.session_state.edit_project_type.strip(),
-        requested_services=[x.strip() for x in st.session_state.edit_requested_services.splitlines() if x.strip()],
+        requested_services=scope["Requested service"],
         investigation_methods=sorted(methods),
         borehole_program=borehole_program,
         test_pit_program=test_pit_program,
@@ -269,11 +310,11 @@ def facts_from_editor(current: ProposalFacts, edited_costs: pd.DataFrame) -> Pro
         test_pit_depth_m=(
             test_pit_program[0].termination_depth_m if len(test_pit_program) == 1 else None
         ),
-        access_notes=st.session_state.edit_access_notes.strip(),
-        utility_locate_notes=st.session_state.edit_locate_notes.strip(),
-        groundwater_notes=st.session_state.edit_groundwater_notes.strip(),
-        laboratory_tests=[x.strip() for x in st.session_state.edit_lab_tests.splitlines() if x.strip()],
-        reporting_requirements=[x.strip() for x in st.session_state.edit_reporting.splitlines() if x.strip()],
+        access_notes="\n".join(scope["Access note"]),
+        utility_locate_notes="\n".join(scope["Utility locate note"]),
+        groundwater_notes="\n".join(scope["Groundwater note"]),
+        laboratory_tests=scope["Laboratory test"],
+        reporting_requirements=scope["Reporting requirement"],
         other_notes=st.session_state.edit_other_notes.strip(),
         cost_items=cost_items,
     )
@@ -301,15 +342,9 @@ def initialize_editor(facts: ProposalFacts) -> None:
         "edit_project_location": facts.project_location,
         "edit_development_description": facts.development_description,
         "edit_project_type": facts.project_type,
-        "edit_requested_services": "\n".join(facts.requested_services),
         "edit_methods": facts.investigation_methods,
         "edit_borehole_program": format_investigation_program(borehole_program, "borehole"),
         "edit_test_pit_program": format_investigation_program(test_pit_program, "test pit"),
-        "edit_access_notes": facts.access_notes,
-        "edit_locate_notes": facts.utility_locate_notes,
-        "edit_groundwater_notes": facts.groundwater_notes,
-        "edit_lab_tests": "\n".join(facts.laboratory_tests),
-        "edit_reporting": "\n".join(facts.reporting_requirements),
         "edit_other_notes": facts.other_notes,
     }
     for key, value in defaults.items():
@@ -318,6 +353,7 @@ def initialize_editor(facts: ProposalFacts) -> None:
         update={"cost_items": merge_standard_cost_items(facts.cost_items)}
     )
     st.session_state.cost_frame = cost_dataframe(facts_with_catalog)
+    st.session_state.scope_frame = scope_dataframe(facts)
 
 
 st.title("Almor Proposal Builder")
@@ -382,6 +418,12 @@ if manual_clicked:
 
 if "proposal_facts" in st.session_state:
     current = ProposalFacts.model_validate(st.session_state.proposal_facts)
+    if "scope_frame" not in st.session_state:
+        st.session_state.scope_frame = scope_dataframe(current)
+    if "cost_frame" not in st.session_state:
+        st.session_state.cost_frame = cost_dataframe(
+            current.model_copy(update={"cost_items": merge_standard_cost_items(current.cost_items)})
+        )
     st.divider()
     st.subheader("2. Verify the proposal information")
 
@@ -428,12 +470,21 @@ if "proposal_facts" in st.session_state:
                 height=110,
                 placeholder="4 test pits to 3 m",
             )
-        st.text_area("Requested services (one per line)", key="edit_requested_services", height=110)
-        st.text_area("Laboratory tests (one per line)", key="edit_lab_tests", height=110)
-        st.text_area("Reporting requirements (one per line)", key="edit_reporting", height=110)
-        st.text_area("Access notes", key="edit_access_notes", height=80)
-        st.text_area("Utility locate notes", key="edit_locate_notes", height=80)
-        st.text_area("Groundwater notes", key="edit_groundwater_notes", height=80)
+        st.caption("Add one scope item per row and select its category.")
+        edited_scope = st.data_editor(
+            st.session_state.scope_frame,
+            num_rows="dynamic",
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Category": st.column_config.SelectboxColumn(
+                    options=SCOPE_CATEGORIES,
+                    required=True,
+                ),
+                "Value": st.column_config.TextColumn(),
+            },
+            key="scope_editor",
+        )
         st.text_area("Other notes", key="edit_other_notes", height=90)
 
     with cost_tab:
@@ -475,9 +526,10 @@ if "proposal_facts" in st.session_state:
                 st.metric(section, f"${preview.section_totals[section]:,.2f}")
         st.metric("Estimated Cost", f"${preview.final_total:,.2f}")
 
-    facts = facts_from_editor(current, edited_costs)
+    facts = facts_from_editor(current, edited_costs, edited_scope)
     st.session_state.proposal_facts = facts.model_dump(mode="json")
     st.session_state.cost_frame = edited_costs
+    st.session_state.scope_frame = edited_scope
     missing = st.session_state.get("scope_program_errors", []) + validate_facts(facts)
     if missing:
         st.warning("Please resolve before generating: " + "; ".join(missing))
