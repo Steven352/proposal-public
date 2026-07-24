@@ -449,7 +449,11 @@ if "proposal_facts" in st.session_state:
             st.text_input("Contact email", key="edit_contact_email")
             st.text_input("Project name *", key="edit_project_name")
             st.text_area("Project location *", key="edit_project_location", height=90)
-        st.text_area("Development description *", key="edit_development_description", height=110)
+        st.text_area(
+            "Development description (optional)",
+            key="edit_development_description",
+            height=110,
+        )
         st.text_input("Project type", key="edit_project_type")
 
     with scope_tab:

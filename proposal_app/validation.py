@@ -11,7 +11,6 @@ def validate_facts(facts: ProposalFacts) -> list[str]:
         "Client": facts.client_name,
         "Project name": facts.project_name,
         "Project location": facts.project_location,
-        "Requested service/development description": facts.development_description,
     }
     missing.extend(label for label, value in required_text.items() if not value.strip())
 
