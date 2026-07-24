@@ -25,6 +25,13 @@ Drilling and test pits may be used separately or together; retrieval and draftin
 select drilling-only, test-pit-only, or mixed-investigation references and wording
 without deriving quantities from contractor hours.
 
+The **Generate a complete PDF from a Word proposal** workflow accepts a completed
+Almor Word proposal and creates one PDF containing every proposal page, the
+Standard Terms, and the original fillable Work Authorization form. Proposal facts
+and the estimated cost are read from the uploaded Word file to fill the form. A
+toggle controls whether handwritten signatures are added to the proposal signature
+page; the Work Authorization form remains unsigned and fillable.
+
 The **Add Final Proposal to Library** workflow writes reviewed Final Word files,
 their search records, and private draft/final revision records directly to the
 private source repository. Reusable edits must occur in at least three reviewed

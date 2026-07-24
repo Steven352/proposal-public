@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
 import hmac
 import os
 
@@ -37,7 +38,7 @@ from proposal_app.investigation import (
     parse_investigation_program,
 )
 from proposal_app.models import CostLineItem, ProposalFacts, RevisionAnalysis
-from proposal_app.pdf_builder import build_pdf_package
+from proposal_app.pdf_builder import build_complete_pdf_package, build_pdf_package
 from proposal_app.revision_learning import (
     aggregate_rule_candidates,
     compare_docx,
@@ -46,6 +47,7 @@ from proposal_app.revision_learning import (
 )
 from proposal_app.secure_bundle import ensure_private_assets, is_public_deployment
 from proposal_app.validation import validate_facts
+from proposal_app.uploaded_proposal import extract_uploaded_proposal
 
 
 st.set_page_config(
@@ -612,7 +614,85 @@ if "generated_outputs" in st.session_state:
     st.text_area("Message", value=output["email_body"], height=220)
 
 st.divider()
-st.subheader("4. Add Final Proposal to Library")
+st.subheader("4. Generate a complete PDF from a Word proposal")
+st.caption(
+    "Upload a completed Word proposal to create one PDF containing the complete proposal, "
+    "Standard Terms, and the original fillable Work Authorization form. The uploaded Word wording "
+    "and structure are not changed."
+)
+complete_word_upload = st.file_uploader(
+    "Completed Word proposal *",
+    type=["docx"],
+    key="complete_pdf_word_upload",
+)
+complete_pdf_signatures = st.toggle(
+    "Add signatures to the proposal signature page",
+    value=True,
+    key="complete_pdf_signatures",
+    help="The Work Authorization form remains unsigned and fillable.",
+)
+
+complete_source_key = ""
+complete_details = None
+if complete_word_upload is not None:
+    complete_word_bytes = complete_word_upload.getvalue()
+    complete_source_key = (
+        f"{hashlib.sha256(complete_word_bytes).hexdigest()}:{int(complete_pdf_signatures)}"
+    )
+    try:
+        complete_details = extract_uploaded_proposal(complete_word_bytes)
+        st.info(
+            f"Detected: {complete_details.facts.proposal_number} | "
+            f"{complete_details.facts.project_name} | "
+            f"${complete_details.budget:,.2f}"
+        )
+    except Exception as error:
+        st.error(str(error))
+
+create_complete_pdf_clicked = st.button(
+    "Generate complete PDF proposal",
+    type="primary",
+    width="stretch",
+    disabled=complete_details is None,
+)
+
+if create_complete_pdf_clicked and complete_details is not None:
+    try:
+        with st.spinner("Converting the Word proposal and assembling the complete PDF..."):
+            complete_pdf, complete_pdf_name = build_complete_pdf_package(
+                complete_word_bytes,
+                complete_details.facts,
+                complete_details.work_authorization_scope,
+                complete_details.budget,
+                add_signatures=complete_pdf_signatures,
+            )
+        st.session_state.complete_pdf_output = {
+            "pdf": complete_pdf,
+            "name": complete_pdf_name,
+            "source_key": complete_source_key,
+            "signed": complete_pdf_signatures,
+        }
+        st.success("Complete PDF proposal generated.")
+    except Exception as error:
+        st.error(str(error))
+
+complete_output = st.session_state.get("complete_pdf_output")
+if complete_output and complete_output["source_key"] == complete_source_key:
+    complete_label = (
+        "Download signed complete PDF proposal"
+        if complete_output["signed"]
+        else "Download unsigned complete PDF proposal"
+    )
+    st.download_button(
+        complete_label,
+        data=complete_output["pdf"],
+        file_name=complete_output["name"],
+        mime="application/pdf",
+        width="stretch",
+    )
+
+st.divider()
+st.subheader("5. Add Final Proposal to Library")
 st.caption(
     "Add only a reviewed Final Word proposal. The app privately records its differences from the AI "
     "draft; a repeated change must occur in at least 3 final proposals and still requires your approval "

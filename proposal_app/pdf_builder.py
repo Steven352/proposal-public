@@ -115,6 +115,20 @@ def extract_signature_page(rendered_pdf: Path, add_signatures: bool) -> bytes:
 
 def filled_work_authorization(facts: ProposalFacts, draft: DraftContent) -> bytes:
     summary = normalize_cost_items(facts.cost_items)
+    return fill_work_authorization(
+        facts,
+        scope=draft.work_authorization_scope,
+        budget=summary.final_total,
+        additional_comments=" ".join(draft.warnings),
+    )
+
+
+def fill_work_authorization(
+    facts: ProposalFacts,
+    scope: str,
+    budget: float,
+    additional_comments: str = "",
+) -> bytes:
     reader = PdfReader(WORK_AUTHORIZATION_PATH)
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
@@ -129,10 +143,10 @@ def filled_work_authorization(facts: ProposalFacts, draft: DraftContent) -> byte
         "ATS_Contact": ATS_CONTACT,
         "Client_Reference_No": facts.client_reference_number,
         "ATS_Project_No": facts.proposal_number,
-        "Scope_of_Work": draft.work_authorization_scope,
-        "Budget": format_money(summary.final_total),
-        "Budget_Manhour_Estimate": format_money(summary.final_total),
-        "Additional_Comments": " ".join(draft.warnings),
+        "Scope_of_Work": scope,
+        "Budget": format_money(budget),
+        "Budget_Manhour_Estimate": format_money(budget),
+        "Additional_Comments": additional_comments,
     }
     filtered = {key: value for key, value in values.items() if key in available_fields}
     for page in writer.pages:
@@ -146,6 +160,32 @@ def filled_work_authorization(facts: ProposalFacts, draft: DraftContent) -> byte
 def combine_package(signature_page: bytes, work_authorization: bytes) -> bytes:
     writer = PdfWriter()
     writer.append(io.BytesIO(signature_page))
+    writer.append(str(STANDARD_TERMS_PATH))
+    writer.append(io.BytesIO(work_authorization))
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def complete_proposal_pdf(rendered_pdf: Path, add_signatures: bool) -> bytes:
+    reader = PdfReader(rendered_pdf)
+    if add_signatures:
+        page = reader.pages[find_signature_page(reader)]
+        overlay = PdfReader(
+            io.BytesIO(signature_overlay(float(page.mediabox.width), float(page.mediabox.height)))
+        )
+        page.merge_page(overlay.pages[0])
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def combine_complete_package(proposal: bytes, work_authorization: bytes) -> bytes:
+    writer = PdfWriter()
+    writer.append(io.BytesIO(proposal))
     writer.append(str(STANDARD_TERMS_PATH))
     writer.append(io.BytesIO(work_authorization))
     output = io.BytesIO()
@@ -168,3 +208,19 @@ def build_pdf_package(
         package = combine_package(signature_page, authorization)
     return package, output_stem(facts) + ".pdf"
 
+
+def build_complete_pdf_package(
+    docx_bytes: bytes,
+    facts: ProposalFacts,
+    scope: str,
+    budget: float,
+    add_signatures: bool,
+) -> tuple[bytes, str]:
+    with tempfile.TemporaryDirectory(prefix="complete_proposal_pdf_") as temporary:
+        output_dir = Path(temporary)
+        stem = output_stem(facts)
+        rendered_pdf = convert_docx_to_pdf(docx_bytes, output_dir, stem)
+        proposal = complete_proposal_pdf(rendered_pdf, add_signatures=add_signatures)
+        authorization = fill_work_authorization(facts, scope=scope, budget=budget)
+        package = combine_complete_package(proposal, authorization)
+    return package, output_stem(facts) + ".pdf"
