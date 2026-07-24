@@ -5,8 +5,10 @@ import os
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 
+from lxml import etree
 from pypdf import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 
@@ -20,6 +22,10 @@ from .config import (
 from .costs import format_money, normalize_cost_items
 from .document_builder import format_date, output_stem
 from .models import DraftContent, ProposalFacts
+
+
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+W = f"{{{W_NS}}}"
 
 
 def find_soffice() -> str:
@@ -40,9 +46,7 @@ def find_soffice() -> str:
     )
 
 
-def convert_docx_to_pdf(docx_bytes: bytes, output_dir: Path, stem: str) -> Path:
-    docx_path = output_dir / f"{stem}.docx"
-    docx_path.write_bytes(docx_bytes)
+def run_soffice_conversion(docx_path: Path, output_dir: Path) -> Path:
     profile_dir = output_dir / "libreoffice-profile"
     profile_dir.mkdir(parents=True, exist_ok=True)
     profile_uri = profile_dir.resolve().as_uri()
@@ -57,10 +61,85 @@ def convert_docx_to_pdf(docx_bytes: bytes, output_dir: Path, stem: str) -> Path:
         str(docx_path),
     ]
     result = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
-    pdf_path = output_dir / f"{stem}.pdf"
+    pdf_path = output_dir / f"{docx_path.stem}.pdf"
     if result.returncode != 0 or not pdf_path.exists() or pdf_path.stat().st_size == 0:
         detail = (result.stderr or result.stdout or "unknown conversion error").strip()
         raise RuntimeError(f"Word-to-PDF conversion failed: {detail}")
+    return pdf_path
+
+
+def cost_fee_paragraph_is_split(pdf_path: Path) -> bool:
+    reader = PdfReader(pdf_path)
+    start_page = None
+    end_page = None
+    for index, page in enumerate(reader.pages):
+        text = (page.extract_text() or "").casefold()
+        if "the total estimated geotechnical" in text:
+            start_page = index
+        if "invoices would be forwarded" in text:
+            end_page = index
+    return start_page is not None and end_page is not None and start_page != end_page
+
+
+def compact_cost_section_for_libreoffice(docx_bytes: bytes) -> bytes:
+    source = io.BytesIO(docx_bytes)
+    target = io.BytesIO()
+    with zipfile.ZipFile(source) as zin, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "word/document.xml":
+                root = etree.fromstring(data)
+                for table in root.xpath(".//w:tbl", namespaces={"w": W_NS}):
+                    table_text = " ".join(
+                        table.xpath(".//w:tr[1]//w:t/text()", namespaces={"w": W_NS})
+                    ).casefold()
+                    required = ("item", "description", "unit", "est", "rate", "total")
+                    if not all(label in table_text for label in required):
+                        continue
+                    for spacing in table.xpath(
+                        ".//w:pPr/w:spacing",
+                        namespaces={"w": W_NS},
+                    ):
+                        spacing.set(W + "after", "0")
+
+                for paragraph in root.xpath(".//w:p", namespaces={"w": W_NS}):
+                    text = "".join(
+                        paragraph.xpath(".//w:t/text()", namespaces={"w": W_NS})
+                    ).strip().casefold()
+                    if not text.startswith("the total estimated geotechnical"):
+                        continue
+                    properties = paragraph.find(W + "pPr")
+                    if properties is None:
+                        properties = etree.Element(W + "pPr")
+                        paragraph.insert(0, properties)
+                    spacing = properties.find(W + "spacing")
+                    if spacing is None:
+                        spacing = etree.SubElement(properties, W + "spacing")
+                    spacing.set(W + "after", "0")
+                    spacing.set(W + "line", "240")
+                    spacing.set(W + "lineRule", "auto")
+                data = etree.tostring(
+                    root,
+                    xml_declaration=True,
+                    encoding="UTF-8",
+                    standalone="yes",
+                )
+            zout.writestr(item, data)
+    return target.getvalue()
+
+
+def convert_docx_to_pdf(docx_bytes: bytes, output_dir: Path, stem: str) -> Path:
+    docx_path = output_dir / f"{stem}.docx"
+    docx_path.write_bytes(docx_bytes)
+    pdf_path = run_soffice_conversion(docx_path, output_dir)
+    if cost_fee_paragraph_is_split(pdf_path):
+        docx_path.write_bytes(compact_cost_section_for_libreoffice(docx_bytes))
+        pdf_path.unlink(missing_ok=True)
+        pdf_path = run_soffice_conversion(docx_path, output_dir)
+        if cost_fee_paragraph_is_split(pdf_path):
+            raise RuntimeError(
+                "Word-to-PDF conversion split the cost fee paragraph across pages."
+            )
     return pdf_path
 
 
