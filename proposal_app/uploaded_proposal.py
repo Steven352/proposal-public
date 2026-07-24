@@ -56,6 +56,23 @@ def _proposal_budget(document) -> float | None:
     return None
 
 
+def _project_details(paragraphs, re_index: int, introduction_index: int | None) -> tuple[str, str]:
+    end_index = introduction_index if introduction_index is not None else len(paragraphs)
+    candidate_lines: list[str] = []
+    for index, paragraph in enumerate(paragraphs[re_index:end_index], start=re_index):
+        lines = _nonempty_lines(paragraph.text)
+        if index == re_index and lines:
+            lines[0] = re.sub(r"^re\s*:\s*", "", lines[0], flags=re.IGNORECASE).strip()
+        candidate_lines.extend(
+            line
+            for line in lines
+            if line and "request for proposal" not in line.casefold()
+        )
+    if not candidate_lines:
+        return "", ""
+    return candidate_lines[0], "\n".join(candidate_lines[1:])
+
+
 def extract_uploaded_proposal(docx_bytes: bytes) -> UploadedProposalDetails:
     try:
         document = Document(io.BytesIO(docx_bytes))
@@ -77,9 +94,13 @@ def extract_uploaded_proposal(docx_bytes: bytes) -> UploadedProposalDetails:
     proposal_line = paragraphs[proposal_line_index].text
     number_match = PROPOSAL_NUMBER_PATTERN.search(proposal_line)
     proposal_number = number_match.group(0).upper() if number_match else ""
-    proposal_date = _iso_date(
-        proposal_line.split("Almor Proposal No.", 1)[0].strip(" \t|-:")
-    )
+    date_text = re.split(
+        r"almor proposal no\.?:?",
+        proposal_line,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    proposal_date = _iso_date(date_text.strip(" \t|-:"))
 
     introduction_index = next(
         (index for index, paragraph in enumerate(paragraphs) if paragraph.text.strip() == "Introduction"),
@@ -89,7 +110,7 @@ def extract_uploaded_proposal(docx_bytes: bytes) -> UploadedProposalDetails:
         (
             index
             for index, paragraph in enumerate(paragraphs)
-            if paragraph.text.strip().casefold().startswith("re:")
+            if re.match(r"^re\s*:", paragraph.text.strip(), flags=re.IGNORECASE)
         ),
         None,
     )
@@ -122,16 +143,11 @@ def extract_uploaded_proposal(docx_bytes: bytes) -> UploadedProposalDetails:
     project_name = ""
     project_location = ""
     if re_index is not None:
-        re_lines = _nonempty_lines(paragraphs[re_index].text)
-        project_lines = [line for line in re_lines[1:] if "request for proposal" not in line.casefold()]
-        project_name = project_lines[-1] if project_lines else ""
-        if introduction_index is not None:
-            location_lines = [
-                line
-                for paragraph in paragraphs[re_index + 1 : introduction_index]
-                for line in _nonempty_lines(paragraph.text)
-            ]
-            project_location = "\n".join(location_lines)
+        project_name, project_location = _project_details(
+            paragraphs,
+            re_index,
+            introduction_index,
+        )
 
     budget = _proposal_budget(document)
     missing = [
