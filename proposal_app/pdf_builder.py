@@ -73,27 +73,86 @@ def find_signature_page(reader: PdfReader) -> int:
     raise RuntimeError("Could not locate the proposal signature page in the rendered Word document.")
 
 
-def signature_overlay(width: float, height: float) -> bytes:
+def signature_anchors(page) -> dict[str, tuple[float, float, float]]:
+    anchors: dict[str, tuple[float, float, float]] = {}
+
+    def visitor(text, _cm, tm, _font, font_size):
+        lowered = text.casefold()
+        for key, marker in (
+            ("prepared", "prepared by"),
+            ("reviewed", "reviewed by"),
+            ("steven", "steven lai"),
+            ("abdul", "abdul alemi"),
+        ):
+            if marker in lowered:
+                anchors[key] = (float(tm[4]), float(tm[5]), float(font_size))
+
+    page.extract_text(visitor_text=visitor)
+    return anchors
+
+
+def signature_overlay(page) -> bytes:
+    width = float(page.mediabox.width)
+    height = float(page.mediabox.height)
     output = io.BytesIO()
     pdf = canvas.Canvas(output, pagesize=(width, height))
     scale_x = width / 612.0
     scale_y = height / 792.0
+    anchors = signature_anchors(page)
+
+    prepared_x, prepared_y, prepared_size = anchors.get(
+        "prepared",
+        (56.7 * scale_x, 401.2 * scale_y, 11.0 * scale_y),
+    )
+    reviewed_x, reviewed_y, reviewed_size = anchors.get(
+        "reviewed",
+        (344.7 * scale_x, prepared_y, prepared_size),
+    )
+    _, steven_y, steven_size = anchors.get(
+        "steven",
+        (prepared_x, 292.9 * scale_y, prepared_size),
+    )
+    _, abdul_y, abdul_size = anchors.get(
+        "abdul",
+        (reviewed_x, steven_y, reviewed_size),
+    )
+    if reviewed_x < width / 2:
+        reviewed_x = 344.7 * scale_x
+
+    left_bottom = steven_y + steven_size + 6 * scale_y
+    left_top = prepared_y - 6 * scale_y
+    left_height = left_top - left_bottom
+    if left_height <= 0:
+        raise RuntimeError("The Prepared by signature area has no usable blank space.")
+    steven_height = min(90 * scale_y, left_height)
+    steven_width = steven_height * 126 / 151
+    steven_bottom = left_bottom + (left_height - steven_height) / 2
+
+    right_bottom = abdul_y + abdul_size + 6 * scale_y
+    right_top = reviewed_y - 6 * scale_y
+    right_height = right_top - right_bottom
+    if right_height <= 0:
+        raise RuntimeError("The Reviewed By signature area has no usable blank space.")
+    abdul_height = min(55 * scale_y, right_height)
+    abdul_width = abdul_height * 228 / 99
+    abdul_bottom = right_bottom + (right_height - abdul_height) / 2
+
     pdf.drawImage(
         str(STEVEN_SIGNATURE_PATH),
-        82 * scale_x,
-        310 * scale_y,
-        width=75 * scale_x,
-        height=90 * scale_y,
-        preserveAspectRatio=True,
+        prepared_x + 25 * scale_x,
+        steven_bottom,
+        width=steven_width,
+        height=steven_height,
+        preserveAspectRatio=False,
         mask="auto",
     )
     pdf.drawImage(
         str(ABDUL_SIGNATURE_PATH),
-        360 * scale_x,
-        325 * scale_y,
-        width=120 * scale_x,
-        height=55 * scale_y,
-        preserveAspectRatio=True,
+        reviewed_x + 15 * scale_x,
+        abdul_bottom,
+        width=abdul_width,
+        height=abdul_height,
+        preserveAspectRatio=False,
         mask="auto",
     )
     pdf.save()
@@ -104,7 +163,7 @@ def extract_signature_page(rendered_pdf: Path, add_signatures: bool) -> bytes:
     reader = PdfReader(rendered_pdf)
     page = reader.pages[find_signature_page(reader)]
     if add_signatures:
-        overlay = PdfReader(io.BytesIO(signature_overlay(float(page.mediabox.width), float(page.mediabox.height))))
+        overlay = PdfReader(io.BytesIO(signature_overlay(page)))
         page.merge_page(overlay.pages[0])
     writer = PdfWriter()
     writer.add_page(page)
@@ -171,9 +230,7 @@ def complete_proposal_pdf(rendered_pdf: Path, add_signatures: bool) -> bytes:
     reader = PdfReader(rendered_pdf)
     if add_signatures:
         page = reader.pages[find_signature_page(reader)]
-        overlay = PdfReader(
-            io.BytesIO(signature_overlay(float(page.mediabox.width), float(page.mediabox.height)))
-        )
+        overlay = PdfReader(io.BytesIO(signature_overlay(page)))
         page.merge_page(overlay.pages[0])
     writer = PdfWriter()
     for page in reader.pages:
