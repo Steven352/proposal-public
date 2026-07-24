@@ -634,18 +634,43 @@ complete_pdf_signatures = st.toggle(
 
 complete_source_key = ""
 complete_details = None
+complete_facts = None
+complete_scope = ""
 if complete_word_upload is not None:
     complete_word_bytes = complete_word_upload.getvalue()
-    complete_source_key = (
-        f"{hashlib.sha256(complete_word_bytes).hexdigest()}:{int(complete_pdf_signatures)}"
-    )
+    complete_word_hash = hashlib.sha256(complete_word_bytes).hexdigest()
     try:
-        complete_details = extract_uploaded_proposal(complete_word_bytes)
+        complete_details = extract_uploaded_proposal(
+            complete_word_bytes,
+            filename=complete_word_upload.name,
+        )
+        complete_project_name = st.text_input(
+            "Project name for Work Authorization *",
+            value=complete_details.facts.project_name,
+            key=f"complete_pdf_project_name_{complete_word_hash[:12]}",
+        ).strip()
+        complete_facts = complete_details.facts.model_copy(
+            update={"project_name": complete_project_name}
+        )
+        complete_scope = (
+            f"{complete_project_name} - geotechnical services described in "
+            f"{complete_facts.proposal_number}."
+            if complete_project_name
+            else ""
+        )
+        complete_source_key = hashlib.sha256(
+            (
+                f"{complete_word_hash}|{int(complete_pdf_signatures)}|"
+                f"{complete_project_name}"
+            ).encode("utf-8")
+        ).hexdigest()
         st.info(
-            f"Detected: {complete_details.facts.proposal_number} | "
-            f"{complete_details.facts.project_name} | "
+            f"Detected: {complete_facts.proposal_number} | "
+            f"{complete_project_name or 'project name required'} | "
             f"${complete_details.budget:,.2f}"
         )
+        if not complete_project_name:
+            st.warning("Enter the project name before generating the PDF.")
     except Exception as error:
         st.error(str(error))
 
@@ -653,16 +678,16 @@ create_complete_pdf_clicked = st.button(
     "Generate complete PDF proposal",
     type="primary",
     width="stretch",
-    disabled=complete_details is None,
+    disabled=complete_details is None or complete_facts is None or not complete_facts.project_name,
 )
 
-if create_complete_pdf_clicked and complete_details is not None:
+if create_complete_pdf_clicked and complete_details is not None and complete_facts is not None:
     try:
         with st.spinner("Converting the Word proposal and assembling the complete PDF..."):
             complete_pdf, complete_pdf_name = build_complete_pdf_package(
                 complete_word_bytes,
-                complete_details.facts,
-                complete_details.work_authorization_scope,
+                complete_facts,
+                complete_scope,
                 complete_details.budget,
                 add_signatures=complete_pdf_signatures,
             )
