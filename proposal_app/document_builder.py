@@ -29,10 +29,11 @@ def safe_filename(value: str) -> str:
 
 
 def output_stem(facts: ProposalFacts) -> str:
-    number = safe_filename(facts.proposal_number or "Proposal")
-    project = safe_filename(facts.project_name or "Geotechnical Assessment")
-    client = safe_filename(facts.client_name or "Client")
-    return f"{number} {project} - {client}"
+    number = safe_filename(facts.proposal_number) if facts.proposal_number.strip() else ""
+    project = safe_filename(facts.project_name) if facts.project_name.strip() else ""
+    client = safe_filename(facts.client_name) if facts.client_name.strip() else ""
+    proposal = " ".join(value for value in (number, project) if value) or "Proposal"
+    return f"{proposal} - {client}" if client else proposal
 
 
 def parse_date(value: str) -> date:
@@ -194,9 +195,6 @@ def update_cost_table(table: Table, facts: ProposalFacts) -> float:
     summary = normalize_cost_items(facts.cost_items)
     if summary.warnings:
         raise ValueError(" ".join(summary.warnings))
-    if not summary.items:
-        raise ValueError("A non-empty cost table is required.")
-
     rows = table.rows
     if len(rows) < 4 or len(table.columns) != 6:
         raise ValueError("Selected proposal has an incompatible cost table.")
@@ -363,7 +361,7 @@ def find_header_location_replacements(
     new_location: str,
 ) -> dict[str, str]:
     """Locate the template's visible header location slot without rebuilding its text box."""
-    if not old_location or not new_location:
+    if not old_location:
         return {}
     replacements: dict[str, str] = {}
     with zipfile.ZipFile(io.BytesIO(docx_bytes)) as archive:

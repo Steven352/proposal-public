@@ -375,7 +375,7 @@ with st.expander("How it works", expanded=False):
     )
 
 st.subheader("1. Add the request")
-proposal_number = st.text_input("Proposal number *", placeholder="P026-###")
+proposal_number = st.text_input("Proposal number", placeholder="P026-###")
 email_text = st.text_area("Request email", height=220, placeholder="Paste the client's request email here...")
 request_files = st.file_uploader(
     "Attachments",
@@ -392,9 +392,7 @@ with right:
     manual_clicked = st.button("Enter manually", width="stretch")
 
 if analyze_clicked:
-    if not proposal_number.strip():
-        st.error("Enter the proposal number before analyzing the request.")
-    elif not email_text.strip() and not request_files:
+    if not email_text.strip() and not request_files and not notes.strip():
         st.error("Paste the request email or upload at least one source file.")
     else:
         try:
@@ -414,14 +412,11 @@ if analyze_clicked:
             st.error(str(error))
 
 if manual_clicked:
-    if not proposal_number.strip():
-        st.error("Enter the proposal number first.")
-    else:
-        facts = initial_facts(proposal_number)
-        st.session_state.proposal_facts = facts.model_dump(mode="json")
-        initialize_editor(facts)
-        st.session_state.pop("generated_outputs", None)
-        st.rerun()
+    facts = initial_facts(proposal_number)
+    st.session_state.proposal_facts = facts.model_dump(mode="json")
+    initialize_editor(facts)
+    st.session_state.pop("generated_outputs", None)
+    st.rerun()
 
 if "proposal_facts" in st.session_state:
     current = ProposalFacts.model_validate(st.session_state.proposal_facts)
@@ -438,17 +433,17 @@ if "proposal_facts" in st.session_state:
     with project_tab:
         col1, col2 = st.columns(2)
         with col1:
-            st.text_input("Proposal number *", key="edit_proposal_number")
+            st.text_input("Proposal number", key="edit_proposal_number")
             st.date_input("Proposal date", key="edit_proposal_date")
-            st.text_input("Client *", key="edit_client_name")
+            st.text_input("Client", key="edit_client_name")
             st.text_area("Client address", key="edit_client_address", height=90)
             st.text_input("Client reference number", key="edit_client_reference")
         with col2:
             st.text_input("Contact name", key="edit_contact_name")
             st.text_input("Contact title", key="edit_contact_title")
             st.text_input("Contact email", key="edit_contact_email")
-            st.text_input("Project name *", key="edit_project_name")
-            st.text_area("Project location *", key="edit_project_location", height=90)
+            st.text_input("Project name", key="edit_project_name")
+            st.text_area("Project location", key="edit_project_location", height=90)
         st.text_area(
             "Development description (optional)",
             key="edit_development_description",
@@ -490,7 +485,6 @@ if "proposal_facts" in st.session_state:
             column_config={
                 "Category": st.column_config.SelectboxColumn(
                     options=SCOPE_CATEGORIES,
-                    required=True,
                 ),
                 "Value": st.column_config.TextColumn(),
             },
@@ -516,11 +510,9 @@ if "proposal_facts" in st.session_state:
                         "Laboratory Testing Program",
                         "Engineering Analysis & Report Preparation",
                     ],
-                    required=True,
                 ),
                 "Unit": st.column_config.SelectboxColumn(
                     options=["hr", "LS", "Ea"],
-                    required=True,
                     help="Every line item can be changed to hourly, lump sum, or each.",
                 ),
                 "Est.": st.column_config.NumberColumn(min_value=0.0),
