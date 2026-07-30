@@ -708,9 +708,9 @@ if complete_output and complete_output["source_key"] == complete_source_key:
 st.divider()
 st.subheader("5. Add Final Proposal to Library")
 st.caption(
-    "Add only a reviewed Final Word proposal. The app privately records its differences from the AI "
-    "draft; a repeated change must occur in at least 3 final proposals and still requires your approval "
-    "before it becomes a drafting rule."
+    "Add a reviewed Final Word proposal by itself, or optionally include the original AI draft for "
+    "revision comparison and learning. A repeated change must occur in at least 3 compared final "
+    "proposals and still requires your approval before it becomes a drafting rule."
 )
 
 generated = st.session_state.get("generated_outputs")
@@ -719,10 +719,10 @@ if generated:
     st.info(f"AI draft selected: {generated['docx_name']}")
 else:
     draft_upload = st.file_uploader(
-        "AI draft Word file *",
+        "Original AI draft Word file (optional)",
         type=["docx"],
         key="library_draft_upload",
-        help="Generate a proposal in this session or upload the original AI draft that was reviewed.",
+        help="Optional. Upload it only if you want the app to analyze changes made during review.",
     )
 
 final_upload = st.file_uploader(
@@ -748,14 +748,9 @@ if add_final_clicked:
         )
     elif final_upload is None:
         st.error("Upload the reviewed Final Proposal Word file.")
-    elif not generated and draft_upload is None:
-        st.error("Generate a proposal in this session or upload its original AI draft Word file.")
     else:
         try:
-            draft_bytes = generated["docx"] if generated else draft_upload.getvalue()
             final_bytes = final_upload.getvalue()
-            draft_name = generated["docx_name"] if generated else draft_upload.name
-            draft_index = proposal_index_record(draft_bytes, draft_name)
             final_index = proposal_index_record(final_bytes, final_upload.name)
             final_number = final_index.get("proposal_number", "")
             if "P026-133" in final_upload.name.upper() or final_number == "P026-133":
@@ -763,13 +758,17 @@ if add_final_clicked:
             final_corpus = " ".join(final_index.get("sections", {}).values()).lower()
             if "geotechnical" not in final_corpus:
                 raise ValueError("Only reviewed geotechnical proposals can be added to this library.")
-            draft_number = draft_index.get("proposal_number", "")
-            if draft_number and final_number and draft_number != final_number:
-                raise ValueError(
-                    f"The AI draft is {draft_number}, but the Final Proposal is {final_number}."
-                )
-
-            with st.spinner("Comparing the AI draft with the reviewed Final Proposal..."):
+            draft_bytes = generated["docx"] if generated else (
+                draft_upload.getvalue() if draft_upload is not None else None
+            )
+            if draft_bytes is not None:
+                draft_name = generated["docx_name"] if generated else draft_upload.name
+                draft_index = proposal_index_record(draft_bytes, draft_name)
+                draft_number = draft_index.get("proposal_number", "")
+                if draft_number and final_number and draft_number != final_number:
+                    raise ValueError(
+                        f"The AI draft is {draft_number}, but the Final Proposal is {final_number}."
+                    )
                 comparison = compare_docx(draft_bytes, final_bytes)
                 if comparison["differences"]:
                     analysis = api_client().analyze_revisions(comparison["differences"])
@@ -777,6 +776,25 @@ if add_final_clicked:
                     analysis = RevisionAnalysis(
                         summary="The reviewed Final Proposal matches the AI draft.", candidates=[]
                     )
+            else:
+                final_hash = hashlib.sha256(final_bytes).hexdigest()
+                comparison = {
+                    "similarity": None,
+                    "draft_line_count": 0,
+                    "final_line_count": 0,
+                    "differences": [],
+                    "draft_sha256": "",
+                    "final_sha256": final_hash,
+                }
+                analysis = RevisionAnalysis(
+                    summary=(
+                        "Final Proposal added without an original AI draft; revision comparison "
+                        "and learning were skipped."
+                    ),
+                    candidates=[],
+                )
+
+            with st.spinner("Adding the reviewed Final Proposal to the private library..."):
                 number = final_number or (
                     st.session_state.get("proposal_facts", {}).get("proposal_number", "")
                 )
@@ -799,7 +817,8 @@ if add_final_clicked:
             st.session_state.library_state = state
             st.success(f"Added to the private proposal library: {repository_path}")
             st.write(analysis.summary)
-            st.caption(f"Draft/final similarity: {comparison['similarity']:.1%}")
+            if comparison["similarity"] is not None:
+                st.caption(f"Draft/final similarity: {comparison['similarity']:.1%}")
         except Exception as error:
             st.error(f"The Final Proposal was not fully added: {error}")
 
