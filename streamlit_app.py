@@ -38,7 +38,7 @@ from proposal_app.investigation import (
     parse_investigation_program,
 )
 from proposal_app.models import CostLineItem, ProposalFacts, RevisionAnalysis
-from proposal_app.pdf_builder import build_complete_pdf_package, build_pdf_package
+from proposal_app.pdf_builder import build_complete_pdf_package
 from proposal_app.revision_learning import (
     aggregate_rule_candidates,
     compare_docx,
@@ -47,7 +47,7 @@ from proposal_app.revision_learning import (
 )
 from proposal_app.secure_bundle import ensure_private_assets, is_public_deployment
 from proposal_app.validation import validate_facts
-from proposal_app.uploaded_proposal import extract_uploaded_proposal
+from proposal_app.uploaded_proposal import client_email_from_proposal, extract_uploaded_proposal
 
 
 st.set_page_config(
@@ -369,7 +369,8 @@ st.caption("Geotechnical proposals assembled from your request and the closest h
 with st.expander("How it works", expanded=False):
     st.write(
         "Paste or upload the request, verify the extracted project and cost information, then generate "
-        "a complete Word proposal, a compact authorization PDF, and the client email draft. Uploaded "
+        "a Word proposal for review. In Step 4, upload the reviewed Word proposal to generate the "
+        "complete PDF and client email draft. Uploaded "
         "request files are processed for the current session. Only a reviewed Final Proposal that you "
         "explicitly confirm is saved to the private proposal library."
     )
@@ -546,14 +547,9 @@ if "proposal_facts" in st.session_state:
                 )
 
     st.divider()
-    st.subheader("3. Generate the package")
-    add_signatures = st.toggle(
-        "Add signatures to PDF",
-        value=True,
-        help="When off, the compact PDF keeps the signature area blank. The Word proposal is never signed.",
-    )
+    st.subheader("3. Generate the Word proposal")
     generate_clicked = st.button(
-        "Generate Word, PDF, and email",
+        "Generate Word proposal",
         type="primary",
         width="stretch",
         disabled=bool(missing),
@@ -569,55 +565,37 @@ if "proposal_facts" in st.session_state:
                 )
                 draft = ai.draft_content(facts, draft_references, RULES_PATH)
                 docx_bytes, docx_name = build_docx(selected_template, facts, draft)
-                pdf_bytes, pdf_name = build_pdf_package(
-                    docx_bytes,
-                    facts,
-                    draft,
-                    add_signatures=add_signatures,
-                )
             st.session_state.generated_outputs = {
                 "docx": docx_bytes,
                 "docx_name": docx_name,
-                "pdf": pdf_bytes,
-                "pdf_name": pdf_name,
-                "email_subject": draft.email_subject,
-                "email_body": draft.email_body,
                 "template": selected_template.name,
-                "signed": add_signatures,
             }
-            st.success("Proposal package generated.")
+            st.success("Word proposal generated. Review it, then upload the reviewed Word file in Step 4.")
         except Exception as error:
             st.error(str(error))
 
 if "generated_outputs" in st.session_state:
     output = st.session_state.generated_outputs
     st.divider()
-    st.subheader("Downloads")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            "Download complete Word proposal",
-            data=output["docx"],
-            file_name=output["docx_name"],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
-    with col2:
-        label = "Download signed PDF package" if output["signed"] else "Download unsigned PDF package"
-        st.download_button(label, data=output["pdf"], file_name=output["pdf_name"], mime="application/pdf")
+    st.subheader("Word proposal")
+    st.download_button(
+        "Download Word proposal",
+        data=output["docx"],
+        file_name=output["docx_name"],
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        width="stretch",
+    )
     st.caption(f"Word layout source: {output['template']}")
-    st.subheader("Client email draft")
-    st.text_input("Subject", value=output["email_subject"])
-    st.text_area("Message", value=output["email_body"], height=220)
 
 st.divider()
-st.subheader("4. Generate a complete PDF from a Word proposal")
+st.subheader("4. Generate the PDF and email from the reviewed Word proposal")
 st.caption(
-    "Upload a completed Word proposal to create one PDF containing the complete proposal, "
-    "Standard Terms, and the original fillable Work Authorization form. The uploaded Word wording "
-    "and structure are not changed."
+    "Upload the reviewed Word proposal to create one PDF containing the complete proposal, "
+    "Standard Terms, and the original fillable Work Authorization form, plus the client email draft. "
+    "The uploaded Word wording and structure are not changed."
 )
 complete_word_upload = st.file_uploader(
-    "Completed Word proposal *",
+    "Reviewed Word proposal *",
     type=["docx"],
     key="complete_pdf_word_upload",
 )
@@ -671,7 +649,7 @@ if complete_word_upload is not None:
         st.error(str(error))
 
 create_complete_pdf_clicked = st.button(
-    "Generate complete PDF proposal",
+    "Generate PDF and email",
     type="primary",
     width="stretch",
     disabled=complete_details is None or complete_facts is None or not complete_facts.project_name,
@@ -687,13 +665,16 @@ if create_complete_pdf_clicked and complete_details is not None and complete_fac
                 complete_details.budget,
                 add_signatures=complete_pdf_signatures,
             )
+            email_subject, email_body = client_email_from_proposal(complete_facts)
         st.session_state.complete_pdf_output = {
             "pdf": complete_pdf,
             "name": complete_pdf_name,
             "source_key": complete_source_key,
             "signed": complete_pdf_signatures,
+            "email_subject": email_subject,
+            "email_body": email_body,
         }
-        st.success("Complete PDF proposal generated.")
+        st.success("Complete PDF proposal and client email generated.")
     except Exception as error:
         st.error(str(error))
 
@@ -710,6 +691,18 @@ if complete_output and complete_output["source_key"] == complete_source_key:
         file_name=complete_output["name"],
         mime="application/pdf",
         width="stretch",
+    )
+    st.subheader("Client email draft")
+    st.text_input(
+        "Subject",
+        value=complete_output["email_subject"],
+        key=f"complete_email_subject_{complete_output['source_key']}",
+    )
+    st.text_area(
+        "Message",
+        value=complete_output["email_body"],
+        height=220,
+        key=f"complete_email_body_{complete_output['source_key']}",
     )
 
 st.divider()

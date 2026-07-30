@@ -23,6 +23,32 @@ class UploadedProposalDetails:
     budget: float
 
 
+def client_email_from_proposal(facts: ProposalFacts) -> tuple[str, str]:
+    subject_parts = [facts.proposal_number, facts.project_name, "Geotechnical Proposal"]
+    subject = " - ".join(part.strip() for part in subject_parts if part.strip())
+    first_name = facts.contact_name.strip().split()[0] if facts.contact_name.strip() else "there"
+    lines = []
+    if facts.contact_email.strip():
+        lines.extend([f"To: {facts.contact_email.strip()}", ""])
+    lines.extend(
+        [
+            f"Hi {first_name},",
+            "",
+            (
+                f"Please find attached our geotechnical proposal for {facts.project_name}."
+                if facts.project_name
+                else "Please find attached our geotechnical proposal."
+            ),
+            "",
+            "Please sign and return the Work Authorization form to proceed with the work.",
+            "",
+            "Regards,",
+            "Steven",
+        ]
+    )
+    return subject, "\n".join(lines)
+
+
 def _nonempty_lines(value: str) -> list[str]:
     return [line.strip() for line in value.splitlines() if line.strip()]
 
