@@ -52,9 +52,12 @@ clause without rewriting adjacent clauses. Minimum necessary change is the gover
 entire proposal, not only the scope of work.
 
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
-borehole/test-pit quantities or depths from hours. Name only laboratory tests with non-zero quantities.
-Treat borehole_program and test_pit_program as authoritative over the legacy single-value fields.
-Preserve every quantity/depth group in the field-program wording.
+borehole/test-pit quantities or depths from hours. In the Scope of Work, do not name actual laboratory
+tests. Use exactly: "Collection of suitable soil samples for laboratory testing. Laboratory testing on
+selected samples to assist with the determination of engineering properties. The actual tests conducted
+will be a function of the soil conditions encountered." Treat borehole_program and test_pit_program as
+authoritative over the legacy single-value fields. Preserve every quantity/depth group in the
+field-program wording.
 
 For boreholes, use the drilling module: track-mounted solid-stem auger wording, SPT at 1.5 m intervals
 where conditions permit, pocket penetrometer testing, sampling, logging, GPS, and drill-cuttings care.

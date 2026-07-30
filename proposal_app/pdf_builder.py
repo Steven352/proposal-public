@@ -10,6 +10,7 @@ from pathlib import Path
 
 from lxml import etree
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import NameObject, TextStringObject
 from reportlab.pdfgen import canvas
 
 from .config import (
@@ -26,6 +27,8 @@ from .models import DraftContent, ProposalFacts
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W = f"{{{W_NS}}}"
+FORM_FONT_SIZE = 6
+WORK_AUTHORIZATION_SCOPE = "geotechnical services"
 
 
 def find_soffice() -> str:
@@ -281,15 +284,27 @@ def fill_work_authorization(
         "ATS_Contact": ATS_CONTACT,
         "Client_Reference_No": facts.client_reference_number,
         "ATS_Project_No": facts.proposal_number,
-        "Scope_of_Work": scope,
+        "Scope_of_Work": WORK_AUTHORIZATION_SCOPE,
         "Budget": format_money(budget),
         "Budget_Manhour_Estimate": format_money(budget),
         "Additional_Comments": additional_comments,
     }
     filtered = {key: value for key, value in values.items() if key in available_fields}
+    default_appearance = TextStringObject(f"/Helv {FORM_FONT_SIZE} Tf 0 g")
+    acroform = writer.root_object.get("/AcroForm")
+    if acroform:
+        acroform.get_object()[NameObject("/DA")] = default_appearance
     for page in writer.pages:
+        for annotation_ref in page.get("/Annots", []):
+            annotation = annotation_ref.get_object()
+            parent_ref = annotation.get("/Parent")
+            parent = parent_ref.get_object() if parent_ref else None
+            field_type = annotation.get("/FT") or (parent and parent.get("/FT"))
+            if annotation.get("/Subtype") == "/Widget" and field_type == "/Tx":
+                annotation[NameObject("/DA")] = default_appearance
+                if parent:
+                    parent[NameObject("/DA")] = default_appearance
         writer.update_page_form_field_values(page, filtered, auto_regenerate=False)
-    writer.set_need_appearances_writer(True)
     output = io.BytesIO()
     writer.write(output)
     return output.getvalue()
