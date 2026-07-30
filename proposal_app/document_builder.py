@@ -385,6 +385,57 @@ def find_header_location_replacements(
     return replacements
 
 
+def find_header_project_replacements(
+    docx_bytes: bytes,
+    old_client: str,
+    new_project: str,
+) -> dict[str, str]:
+    """Locate the primary header's project-name slot even when it differs from front matter."""
+    replacements: dict[str, str] = {}
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as archive:
+        header_names = sorted(
+            name
+            for name in archive.namelist()
+            if name.startswith("word/header") and name.endswith(".xml")
+        )
+        for name in header_names:
+            root = etree.fromstring(archive.read(name))
+            paragraphs = root.xpath(
+                ".//w:p[not(.//w:p)]",
+                namespaces={"w": W_NS},
+            )
+            texts = [
+                "".join(paragraph.xpath(".//w:t/text()", namespaces={"w": W_NS})).strip()
+                for paragraph in paragraphs
+            ]
+            if not any("Proposal for Geotechnical Services" in text for text in texts):
+                continue
+
+            for text in texts:
+                if not text:
+                    continue
+                if "Proposal for Geotechnical Services" in text:
+                    match = re.search(
+                        r"Proposal for Geotechnical Services\s+(.+?)\s+Almor Proposal No\.",
+                        text,
+                        flags=re.IGNORECASE,
+                    )
+                    if match:
+                        replacements[match.group(1).strip()] = new_project
+                    continue
+                if "Almor Proposal No." in text:
+                    continue
+                if text == old_client or text == "Proposal for Geotechnical Services":
+                    continue
+                replacements[text] = new_project
+
+            # The first qualifying header is the primary project header. Later
+            # headers contain the project location and must remain independent.
+            if replacements:
+                break
+    return replacements
+
+
 def build_docx(
     template_path: Path,
     facts: ProposalFacts,
@@ -432,6 +483,13 @@ def build_docx(
         old_values["old_client"]: facts.client_name,
         old_values["old_project"]: facts.project_name,
     }
+    replacements.update(
+        find_header_project_replacements(
+            saved_bytes,
+            old_values["old_client"],
+            facts.project_name,
+        )
+    )
     replacements.update(
         find_header_location_replacements(
             saved_bytes,
