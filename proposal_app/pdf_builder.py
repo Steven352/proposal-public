@@ -10,7 +10,7 @@ from pathlib import Path
 
 from lxml import etree
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import NameObject, TextStringObject
+from pypdf.generic import DictionaryObject, NameObject, TextStringObject
 from reportlab.pdfgen import canvas
 
 from .config import (
@@ -27,7 +27,8 @@ from .models import DraftContent, ProposalFacts
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W = f"{{{W_NS}}}"
-FORM_FONT_SIZE = 6
+FORM_FONT_NAME = "Arial"
+FORM_FONT_SIZE = 10
 WORK_AUTHORIZATION_SCOPE = "geotechnical services"
 
 
@@ -290,10 +291,23 @@ def fill_work_authorization(
         "Additional_Comments": additional_comments,
     }
     filtered = {key: value for key, value in values.items() if key in available_fields}
-    default_appearance = TextStringObject(f"/Helv {FORM_FONT_SIZE} Tf 0 g")
+    default_appearance = TextStringObject(f"/{FORM_FONT_NAME} {FORM_FONT_SIZE} Tf 0 g")
     acroform = writer.root_object.get("/AcroForm")
     if acroform:
-        acroform.get_object()[NameObject("/DA")] = default_appearance
+        acroform_object = acroform.get_object()
+        resources = acroform_object.setdefault(NameObject("/DR"), DictionaryObject())
+        fonts = resources.setdefault(NameObject("/Font"), DictionaryObject())
+        fonts[NameObject(f"/{FORM_FONT_NAME}")] = writer._add_object(
+            DictionaryObject(
+                {
+                    NameObject("/Type"): NameObject("/Font"),
+                    NameObject("/Subtype"): NameObject("/Type1"),
+                    NameObject("/BaseFont"): NameObject(f"/{FORM_FONT_NAME}"),
+                    NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+                }
+            )
+        )
+        acroform_object[NameObject("/DA")] = default_appearance
     for page in writer.pages:
         for annotation_ref in page.get("/Annots", []):
             annotation = annotation_ref.get_object()
