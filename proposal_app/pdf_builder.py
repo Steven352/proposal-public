@@ -147,12 +147,34 @@ def convert_docx_to_pdf(docx_bytes: bytes, output_dir: Path, stem: str) -> Path:
     return pdf_path
 
 
+def normalized_pdf_text(text: str) -> str:
+    """Make PDF text matching insensitive to layout-driven spacing and line breaks."""
+    return "".join(character for character in text.casefold() if character.isalnum())
+
+
 def find_signature_page(reader: PdfReader) -> int:
+    best_match: tuple[int, int] | None = None
     for index, page in enumerate(reader.pages):
-        text = page.extract_text() or ""
-        required = ("Prepared by", "Reviewed By", "Steven Lai", "Abdul Alemi")
-        if all(value.lower() in text.lower() for value in required):
+        text = normalized_pdf_text(page.extract_text() or "")
+        has_prepared = "preparedby" in text
+        has_reviewed = "reviewedby" in text
+        has_steven = "stevenlai" in text
+        has_abdul = "abdulalemi" in text
+
+        # These two labels uniquely identify the proposal signature block. Names can
+        # move to another page or be omitted from extracted PDF text after Word is
+        # rendered by a different LibreOffice version.
+        if has_prepared and has_reviewed:
             return index
+
+        score = 3 * int(has_prepared) + 3 * int(has_reviewed)
+        score += int(has_steven) + int(has_abdul)
+        if (has_prepared or has_reviewed) and score >= 4:
+            if best_match is None or score > best_match[0]:
+                best_match = (score, index)
+
+    if best_match is not None:
+        return best_match[1]
     raise RuntimeError("Could not locate the proposal signature page in the rendered Word document.")
 
 
