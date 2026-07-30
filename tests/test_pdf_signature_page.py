@@ -29,9 +29,21 @@ class SignaturePageDetectionTest(unittest.TestCase):
         reader = FakeReader("Introduction", "Prepared by\nSteven Lai")
         self.assertEqual(find_signature_page(reader), 1)
 
-    def test_rejects_unrelated_person_name_mentions(self):
+    def test_finds_closure_when_signature_labels_are_not_extractable(self):
+        reader = FakeReader("Introduction", "Closure\nRespectfully Submitted,")
+        self.assertEqual(find_signature_page(reader), 1)
+
+    def test_uses_last_page_when_signature_text_is_outlined(self):
+        reader = FakeReader("Introduction", "Terms and Conditions", "")
+        self.assertEqual(find_signature_page(reader), 2)
+
+    def test_uses_last_page_when_no_pdf_text_is_extractable(self):
+        reader = FakeReader("", "", "")
+        self.assertEqual(find_signature_page(reader), 2)
+
+    def test_rejects_a_pdf_without_pages(self):
         with self.assertRaises(RuntimeError):
-            find_signature_page(FakeReader("Steven Lai and Abdul Alemi"))
+            find_signature_page(FakeReader())
 
 
 if __name__ == "__main__":

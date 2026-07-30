@@ -160,6 +160,9 @@ def find_signature_page(reader: PdfReader) -> int:
         has_reviewed = "reviewedby" in text
         has_steven = "stevenlai" in text
         has_abdul = "abdulalemi" in text
+        has_submitted = "respectfullysubmitted" in text
+        has_company = "almortestingservicesltd" in text
+        has_closure = "closure" in text
 
         # These two labels uniquely identify the proposal signature block. Names can
         # move to another page or be omitted from extracted PDF text after Word is
@@ -169,12 +172,18 @@ def find_signature_page(reader: PdfReader) -> int:
 
         score = 3 * int(has_prepared) + 3 * int(has_reviewed)
         score += int(has_steven) + int(has_abdul)
-        if (has_prepared or has_reviewed) and score >= 4:
+        score += 4 * int(has_submitted) + 4 * int(has_company) + 2 * int(has_closure)
+        if score >= 4:
             if best_match is None or score > best_match[0]:
                 best_match = (score, index)
 
     if best_match is not None:
         return best_match[1]
+    if reader.pages:
+        # The generated proposal always ends with its closure/signature block. Some
+        # LibreOffice/PDF combinations render that text as outlines, leaving no
+        # searchable anchors; the final proposal page is then the reliable fallback.
+        return len(reader.pages) - 1
     raise RuntimeError("Could not locate the proposal signature page in the rendered Word document.")
 
 
