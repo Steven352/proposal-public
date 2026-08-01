@@ -30,6 +30,7 @@ W = f"{{{W_NS}}}"
 FORM_FONT_NAME = "Arial"
 FORM_FONT_SIZE = 10
 WORK_AUTHORIZATION_SCOPE = "geotechnical services"
+SIGNED_PAGE_DPI = 200
 
 
 def find_soffice() -> str:
@@ -273,12 +274,69 @@ def signature_overlay(page) -> bytes:
     return output.getvalue()
 
 
+def rasterize_pdf_page(page, dpi: int = SIGNED_PAGE_DPI) -> bytes:
+    """Return a one-page, image-only PDF so none of its text can be selected."""
+    renderer = shutil.which("pdftoppm")
+    if not renderer:
+        raise RuntimeError(
+            "Poppler is required to convert the signed proposal page to image mode."
+        )
+    width = float(page.mediabox.width)
+    height = float(page.mediabox.height)
+    with tempfile.TemporaryDirectory(prefix="signed_page_image_") as temporary:
+        output_dir = Path(temporary)
+        source_path = output_dir / "signed-page.pdf"
+        image_prefix = output_dir / "signed-page"
+        source_writer = PdfWriter()
+        source_writer.add_page(page)
+        with source_path.open("wb") as stream:
+            source_writer.write(stream)
+        result = subprocess.run(
+            [
+                renderer,
+                "-png",
+                "-singlefile",
+                "-r",
+                str(dpi),
+                str(source_path),
+                str(image_prefix),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        image_path = image_prefix.with_suffix(".png")
+        if result.returncode != 0 or not image_path.exists():
+            detail = (result.stderr or result.stdout or "unknown rendering error").strip()
+            raise RuntimeError(f"Signed proposal page image conversion failed: {detail}")
+
+        output = io.BytesIO()
+        image_pdf = canvas.Canvas(output, pagesize=(width, height), pageCompression=1)
+        image_pdf.drawImage(
+            str(image_path),
+            0,
+            0,
+            width=width,
+            height=height,
+            preserveAspectRatio=False,
+            mask="auto",
+        )
+        image_pdf.save()
+        return output.getvalue()
+
+
+def add_signatures_as_image_page(page) -> bytes:
+    overlay = PdfReader(io.BytesIO(signature_overlay(page)))
+    page.merge_page(overlay.pages[0])
+    return rasterize_pdf_page(page)
+
+
 def extract_signature_page(rendered_pdf: Path, add_signatures: bool) -> bytes:
     reader = PdfReader(rendered_pdf)
     page = reader.pages[find_signature_page(reader)]
     if add_signatures:
-        overlay = PdfReader(io.BytesIO(signature_overlay(page)))
-        page.merge_page(overlay.pages[0])
+        return add_signatures_as_image_page(page)
     writer = PdfWriter()
     writer.add_page(page)
     output = io.BytesIO()
@@ -367,13 +425,16 @@ def combine_package(signature_page: bytes, work_authorization: bytes) -> bytes:
 
 def complete_proposal_pdf(rendered_pdf: Path, add_signatures: bool) -> bytes:
     reader = PdfReader(rendered_pdf)
+    signature_index = None
+    signed_page = None
     if add_signatures:
-        page = reader.pages[find_signature_page(reader)]
-        overlay = PdfReader(io.BytesIO(signature_overlay(page)))
-        page.merge_page(overlay.pages[0])
+        signature_index = find_signature_page(reader)
+        signed_page = PdfReader(
+            io.BytesIO(add_signatures_as_image_page(reader.pages[signature_index]))
+        ).pages[0]
     writer = PdfWriter()
-    for page in reader.pages:
-        writer.add_page(page)
+    for index, page in enumerate(reader.pages):
+        writer.add_page(signed_page if index == signature_index else page)
     output = io.BytesIO()
     writer.write(output)
     return output.getvalue()

@@ -1,4 +1,5 @@
 libreoffice-writer
+poppler-utils
 fonts-liberation
 fonts-crosextra-carlito
 fonts-crosextra-caladea
