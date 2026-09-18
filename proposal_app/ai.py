@@ -61,7 +61,9 @@ field-program wording.
 
 For boreholes, use the drilling module: track-mounted solid-stem auger wording, SPT at 1.5 m intervals
 where conditions permit, pocket penetrometer testing, sampling, logging, GPS, and drill-cuttings care.
-When groundwater monitoring is included in investigation_methods, use exactly: "Installation of 25 mm
+Every proposal with boreholes must include this standard scope, even when groundwater monitoring
+is not selected in investigation_methods or priced separately. This user-approved requirement takes
+precedence over scope-module filtering and historical rules. Use exactly: "Installation of 25 mm
 diameter standpipe piezometers in all boreholes, backfilled with cuttings and capped with bentonite.
 Groundwater readings will be taken at the end of drilling and during one follow-up visit two weeks after
 the field program."

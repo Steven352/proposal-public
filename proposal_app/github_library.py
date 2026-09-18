@@ -4,6 +4,7 @@ import base64
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
+from hashlib import sha256
 from pathlib import Path
 import re
 from typing import Callable
@@ -12,7 +13,8 @@ from urllib.parse import quote
 import requests
 
 from .config import HISTORICAL_DIR, LEARNED_RULES_PATH, LIBRARY_INDEX_ADDITIONS
-from .revision_learning import aggregate_rule_candidates
+from .revision_learning import aggregate_rule_candidates, proposal_index_record, revision_record
+from .models import RevisionAnalysis
 
 
 STATE_PATH = "knowledge/library_state.json"
@@ -244,3 +246,32 @@ def approve_rules(client: GitHubLibrary, keys: list[str]) -> tuple[dict, str]:
     LEARNED_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
     LEARNED_RULES_PATH.write_text(content, encoding="utf-8")
     return state, content
+
+
+def save_pdf_source_to_library(client: GitHubLibrary, filename: str, data: bytes) -> tuple[dict, dict, str]:
+    """Archive the reviewed PDF source without inferring reviewer edits from another draft."""
+    index = proposal_index_record(data, filename)
+    number = index.get("proposal_number", "")
+    if "P026-133" in filename.upper() or number == "P026-133":
+        raise ValueError("P026-133 is excluded and cannot be added to the proposal library.")
+    if "geotechnical" not in " ".join(index.get("sections", {}).values()).lower():
+        raise ValueError("Only geotechnical proposals can be added to this library.")
+    state = client.read_json(STATE_PATH, empty_state())
+    digest = sha256(data).hexdigest()
+    existing = next((item for item in state.get("records", []) if item.get("id") == digest[:16]), None)
+    if existing:
+        return client.read_json(ADDITIONS_PATH, {"proposals": []}), state, existing["repository_path"]
+    comparison = {
+        "similarity": None, "draft_line_count": 0, "final_line_count": 0,
+        "differences": [], "draft_sha256": "", "final_sha256": sha256(data).hexdigest(),
+    }
+    record = revision_record(
+        proposal_number=number, final_filename=filename,
+        repository_path=f"data/historical_proposals/{safe_filename(filename)}",
+        comparison=comparison,
+        analysis=RevisionAnalysis(
+            summary="Reviewed Word automatically saved when generating the complete PDF package.",
+            candidates=[],
+        ),
+    )
+    return add_final_to_library(client, filename, data, index, record)

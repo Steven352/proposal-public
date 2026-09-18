@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from proposal_app.ai import ProposalAI
+from proposal_app.complete_package import generate_complete_package
 from proposal_app.config import (
     DEFAULT_DRAFT_MODEL,
     DEFAULT_EXTRACTION_MODEL,
@@ -38,7 +39,6 @@ from proposal_app.investigation import (
     parse_investigation_program,
 )
 from proposal_app.models import CostLineItem, ProposalFacts, RevisionAnalysis
-from proposal_app.pdf_builder import build_complete_pdf_package
 from proposal_app.revision_learning import (
     aggregate_rule_candidates,
     compare_docx,
@@ -47,7 +47,7 @@ from proposal_app.revision_learning import (
 )
 from proposal_app.secure_bundle import ensure_private_assets, is_public_deployment
 from proposal_app.validation import validate_facts
-from proposal_app.uploaded_proposal import client_email_from_proposal, extract_uploaded_proposal
+from proposal_app.uploaded_proposal import extract_uploaded_proposal
 
 
 st.set_page_config(
@@ -592,7 +592,7 @@ st.subheader("4. Generate the PDF and email from the reviewed Word proposal")
 st.caption(
     "Upload the reviewed Word proposal to create one PDF containing the complete proposal, "
     "Standard Terms, and the original fillable Work Authorization form, plus the client email draft. "
-    "The uploaded Word wording and structure are not changed."
+    "The original Word is automatically saved to the private proposal library. Missing standpipe scope is added to borehole proposals in the PDF; an updated Word copy is also available."
 )
 complete_word_upload = st.file_uploader(
     "Reviewed Word proposal *",
@@ -634,7 +634,7 @@ if complete_word_upload is not None:
         )
         complete_source_key = hashlib.sha256(
             (
-                f"{complete_word_hash}|{int(complete_pdf_signatures)}|"
+                f"auto-library-standpipe-v1|{complete_word_hash}|{int(complete_pdf_signatures)}|"
                 f"{complete_project_name}"
             ).encode("utf-8")
         ).hexdigest()
@@ -658,28 +658,33 @@ create_complete_pdf_clicked = st.button(
 if create_complete_pdf_clicked and complete_details is not None and complete_facts is not None:
     try:
         with st.spinner("Converting the Word proposal and assembling the complete PDF..."):
-            complete_pdf, complete_pdf_name = build_complete_pdf_package(
-                complete_word_bytes,
-                complete_facts,
-                complete_scope,
-                complete_details.budget,
-                add_signatures=complete_pdf_signatures,
+            output = generate_complete_package(
+                complete_word_bytes, complete_word_upload.name, complete_facts,
+                complete_scope, complete_details.budget, complete_pdf_signatures, library,
             )
-            email_subject, email_body = client_email_from_proposal(complete_facts)
-        st.session_state.complete_pdf_output = {
-            "pdf": complete_pdf,
-            "name": complete_pdf_name,
-            "source_key": complete_source_key,
-            "signed": complete_pdf_signatures,
-            "email_subject": email_subject,
-            "email_body": email_body,
-        }
+        output["source_key"] = complete_source_key
+        st.session_state.complete_pdf_output = output
+        if output["library_path"]:
+            load_index.cache_clear()
+            st.session_state.library_state = output["library_state"]
         st.success("Complete PDF proposal and client email generated.")
     except Exception as error:
         st.error(str(error))
 
 complete_output = st.session_state.get("complete_pdf_output")
 if complete_output and complete_output["source_key"] == complete_source_key:
+    if complete_output["library_error"]:
+        st.error("PDF generated, but the uploaded Word was not fully saved to the library: " + complete_output["library_error"])
+        st.caption("Generate again to retry saving the Word to the library.")
+    else:
+        st.success("Uploaded Word saved to the proposal library: " + complete_output["library_path"])
+    if complete_output["word_changed"]:
+        st.info("The standard standpipe clause was added to the PDF Scope of Work. The library retains your original upload.")
+        st.download_button(
+            "Download Word with standpipe scope", data=complete_output["word"],
+            file_name=complete_word_upload.name,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
     complete_label = (
         "Download signed complete PDF proposal"
         if complete_output["signed"]

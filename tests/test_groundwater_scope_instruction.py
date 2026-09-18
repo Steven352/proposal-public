@@ -15,10 +15,10 @@ class GroundwaterScopeInstructionTest(unittest.TestCase):
         normalized_instructions = " ".join(DRAFT_INSTRUCTIONS.split())
         self.assertIn(GROUNDWATER_SCOPE, normalized_instructions)
 
-    def test_requires_groundwater_monitoring_before_adding_module(self):
+    def test_includes_borehole_scope_without_monitoring_selection(self):
         normalized_instructions = " ".join(DRAFT_INSTRUCTIONS.split())
         self.assertIn(
-            "When groundwater monitoring is included in investigation_methods, use exactly:",
+            "Every proposal with boreholes must include this standard scope, even when groundwater monitoring is not selected",
             normalized_instructions,
         )
 

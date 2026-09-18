@@ -49,3 +49,16 @@ the private proposal repository. It must never be committed to this public
 deployment repository.
 
 The canonical private source repository is not linked here intentionally.
+
+
+Generating a complete PDF automatically saves the uploaded original Word proposal and its
+search index to the private library. No separate library action or AI draft is required.
+If storage fails, the PDF remains downloadable and the app shows the failure; generate again
+to retry. Repeated generation preserves existing review-learning records for the same file.
+
+Every borehole proposal includes the approved 25 mm standpipe piezometer scope, with readings
+at the end of drilling and one follow-up visit two weeks after the field program, regardless
+of the groundwater-monitoring selection. The Word assembler ensures a missing clause is
+added even if AI omits it. Uploaded borehole proposals missing the clause receive it in the
+PDF and an updated Word download; the library retains the original uploaded Word. Existing
+standpipe clauses and test-pit-only proposals are preserved.

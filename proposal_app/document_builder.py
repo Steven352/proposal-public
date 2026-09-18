@@ -19,6 +19,12 @@ from .models import DraftContent, ParagraphBlock, ProposalFacts
 
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+STANDPIPE_SCOPE = (
+    "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with "
+    "cuttings and capped with bentonite. Groundwater readings will be taken at the end of "
+    "drilling and during one follow-up visit two weeks after the field program."
+)
+
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 
 
@@ -499,4 +505,36 @@ def build_docx(
         )
     )
     result = patch_package_text(saved_bytes, replacements)
-    return result, output_stem(facts) + ".docx"
+    return ensure_standpipe_scope(
+        result, required=bool(facts.borehole_program or facts.borehole_quantity or "drilling" in facts.investigation_methods)
+    ), output_stem(facts) + ".docx"
+
+
+def ensure_standpipe_scope(data: bytes, required: bool = False) -> bytes:
+    """Ensure borehole proposals include the approved standpipe scope in the field program."""
+    document = Document(io.BytesIO(data))
+    headings = [p.text.strip() for p in document.paragraphs]
+    if "Geotechnical Field Program" not in headings or "Cost of Geotechnical Services" not in headings:
+        if required:
+            raise ValueError("Cannot add standpipe scope: the proposal field-program headings are missing.")
+        return data
+    field = paragraphs_between(document, "Geotechnical Field Program", "Cost of Geotechnical Services")
+    text = " ".join(p.text for p in field).lower()
+    if not required and not re.search(r"\bboreholes?\b", text):
+        return data
+    existing = next((p for p in field if "standpipe" in p.text.lower()), None)
+    if existing is not None:
+        if not required or existing.text == STANDPIPE_SCOPE:
+            return data
+        set_paragraph_text(existing, STANDPIPE_SCOPE)
+        output = io.BytesIO()
+        document.save(output)
+        return output.getvalue()
+    anchor = next((p for p in field if "preparation of" in p.text.lower()),
+                  paragraph_by_text(document, "Cost of Geotechnical Services"))
+    prototype = next((p for p in field if p._p.pPr is not None and p._p.pPr.numPr is not None),
+                     field[0] if field else anchor)
+    clone_paragraph_before(anchor, prototype, STANDPIPE_SCOPE)
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue()
