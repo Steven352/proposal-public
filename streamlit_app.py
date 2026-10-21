@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from datetime import date
 import hashlib
-import hmac
 import os
 
 import pandas as pd
 import streamlit as st
 
 from proposal_app.ai import ProposalAI
+from proposal_app.access import access_role
 from proposal_app.complete_package import generate_complete_package
 from proposal_app.config import (
     DEFAULT_DRAFT_MODEL,
@@ -80,17 +80,20 @@ def require_public_access_code() -> None:
     if not is_public_deployment():
         return
     configured_code = secret("APP_ACCESS_CODE")
-    if not configured_code:
-        st.error("APP_ACCESS_CODE is not configured in Streamlit Secrets.")
-        st.stop()
-    if st.session_state.get("access_granted"):
+    if (st.session_state.get("access_granted")
+            and st.session_state.get("access_role") in {"standard", "signer"}):
         return
+    # Existing sessions predate signing roles and must authenticate again.
+    for key in ("access_granted", "access_role", "complete_pdf_output", "complete_pdf_signatures"):
+        st.session_state.pop(key, None)
 
     st.title("Almor Proposal Builder")
     entered_code = st.text_input("Access code", type="password")
     if st.button("Open Proposal Builder", type="primary", width="stretch"):
-        if hmac.compare_digest(entered_code, configured_code):
+        role = access_role(entered_code, configured_code)
+        if role:
             st.session_state.access_granted = True
+            st.session_state.access_role = role
             st.rerun()
         else:
             st.error("Incorrect access code.")
@@ -365,6 +368,11 @@ def initialize_editor(facts: ProposalFacts) -> None:
 
 st.title("Almor Proposal Builder")
 st.caption("Geotechnical proposals assembled from your request and the closest historical ATS/Almor examples.")
+if st.button("Switch access code"):
+    for key in ("access_granted", "access_role", "complete_pdf_output", "complete_pdf_signatures"):
+        st.session_state.pop(key, None)
+    st.rerun()
+
 
 with st.expander("How it works", expanded=False):
     st.write(
@@ -599,12 +607,20 @@ complete_word_upload = st.file_uploader(
     type=["docx"],
     key="complete_pdf_word_upload",
 )
-complete_pdf_signatures = st.toggle(
-    "Add signatures to the proposal signature page",
-    value=True,
-    key="complete_pdf_signatures",
-    help="The Work Authorization form remains unsigned and fillable.",
-)
+can_sign = st.session_state.get("access_role") == "signer"
+complete_pdf_signatures = False
+if can_sign:
+    complete_pdf_signatures = st.toggle(
+        "Add signatures to the proposal signature page",
+        value=True,
+        key="complete_pdf_signatures",
+        help="The Work Authorization form remains unsigned and fillable.",
+    )
+else:
+    st.session_state.pop("complete_pdf_signatures", None)
+    if st.session_state.get("complete_pdf_output", {}).get("signed"):
+        st.session_state.pop("complete_pdf_output", None)
+
 
 complete_source_key = ""
 complete_details = None
@@ -660,7 +676,7 @@ if create_complete_pdf_clicked and complete_details is not None and complete_fac
         with st.spinner("Converting the Word proposal and assembling the complete PDF..."):
             output = generate_complete_package(
                 complete_word_bytes, complete_word_upload.name, complete_facts,
-                complete_scope, complete_details.budget, complete_pdf_signatures, library,
+                complete_scope, complete_details.budget, bool(can_sign and complete_pdf_signatures), library,
             )
         output["source_key"] = complete_source_key
         st.session_state.complete_pdf_output = output
