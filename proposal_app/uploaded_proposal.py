@@ -135,6 +135,31 @@ def _project_from_filename(filename: str, proposal_number: str, client_name: str
     return candidate
 
 
+def _client_from_introduction(paragraphs, introduction_index, contact_name: str) -> str:
+    if introduction_index is None or introduction_index + 1 >= len(paragraphs):
+        return ""
+    introduction = " ".join(paragraphs[introduction_index + 1].text.split())
+    match = re.search(
+        r"\bAt the request of\s+(.+?),\s*Almor Testing Services\b",
+        introduction,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return ""
+    requester = re.sub(
+        r"\s*\((?:the\s+)?Client\)\s*$", "", match.group(1), flags=re.IGNORECASE
+    ).strip()
+    # When the named contact represents a company, the company is the client.
+    # Match the contact explicitly so names such as 'City of Calgary' stay intact.
+    contact = re.sub(
+        r"^(?:Mr|Mrs|Ms|Miss|Dr)(?:\.\s*|\s+)", "", contact_name, flags=re.IGNORECASE
+    ).split(",", 1)[0].strip()
+    prefix = f"{contact} of "
+    if contact and requester.casefold().startswith(prefix.casefold()):
+        return requester[len(prefix):].strip()
+    return requester
+
+
 def extract_uploaded_proposal(docx_bytes: bytes, filename: str = "") -> UploadedProposalDetails:
     try:
         document = Document(io.BytesIO(docx_bytes))
@@ -209,6 +234,9 @@ def extract_uploaded_proposal(docx_bytes: bytes, filename: str = "") -> Uploaded
         contact_name = contact_parts[0]
         if len(contact_parts) > 1:
             contact_email = contact_parts[1]
+
+    if not client_name:
+        client_name = _client_from_introduction(paragraphs, introduction_index, contact_name)
 
     project_name, project_location = _project_details(front_lines)
     if not project_name:
