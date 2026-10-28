@@ -40,7 +40,7 @@ def client_email_from_proposal(facts: ProposalFacts) -> tuple[str, str]:
                 else "Please find attached our geotechnical proposal."
             ),
             "",
-            "Please sign and return the Work Authorization form to proceed with the work.",
+            "If approved, please sign and return the Work Authorization form to proceed with the work.",
             "",
             "Regards,",
             "Steven",
