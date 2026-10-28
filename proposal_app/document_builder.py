@@ -13,7 +13,7 @@ from docx.table import Table, _Row
 from docx.text.paragraph import Paragraph
 from lxml import etree
 
-from .config import SECTION_ORDER
+from .config import HISTORICAL_DIR, SECTION_ORDER
 from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
 
@@ -442,12 +442,65 @@ def find_header_project_replacements(
     return replacements
 
 
+def configure_personnel_section(
+    document: DocumentType,
+    include: bool,
+    templates_dir: Path = HISTORICAL_DIR,
+) -> None:
+    """Keep/remove the complete section, or import its approved template wording."""
+    heading = "Proposed Project Personnel"
+    following_heading = "Scope of Work and Cost Summary"
+    existing = next((p for p in document.paragraphs if p.text.strip() == heading), None)
+    if existing is not None:
+        if not include:
+            end = paragraph_by_text(document, following_heading)._p
+            node = existing._p
+            while node is not end:
+                following = node.getnext()
+                node.getparent().remove(node)
+                node = following
+        return
+    if not include:
+        return
+
+    anchor = paragraph_by_text(document, following_heading)
+    for path in sorted(templates_dir.glob("*.docx")):
+        if path.name.startswith("~$"):
+            continue
+        source = Document(path)
+        headings = [p.text.strip() for p in source.paragraphs]
+        if heading not in headings or following_heading not in headings:
+            continue
+        start, end = headings.index(heading), headings.index(following_heading)
+        if end <= start:
+            continue
+        for paragraph in source.paragraphs[start:end]:
+            clone = deepcopy(paragraph._p)
+            # A section break belongs to the source document, never the imported bio.
+            for section in clone.xpath("./w:pPr/w:sectPr"):
+                section.getparent().remove(section)
+            anchor._p.addprevious(clone)
+            imported = Paragraph(clone, document)
+            style_name = paragraph.style.name
+            imported.style = (
+                document.styles[style_name]
+                if style_name in document.styles else document.styles["Normal"]
+            )
+        return
+    raise ValueError(
+        "No approved personnel section was found in the historical templates. "
+        "Uncheck Include Proposed Project Personnel section or add a template containing it."
+    )
+
+
 def build_docx(
     template_path: Path,
     facts: ProposalFacts,
     draft: DraftContent,
+    include_proposed_project_personnel: bool = True,
 ) -> tuple[bytes, str]:
     document = Document(template_path)
+    configure_personnel_section(document, include_proposed_project_personnel)
     old_values = update_front_matter(document, facts)
 
     replace_section(

@@ -25,6 +25,14 @@ Drilling and test pits may be used separately or together; retrieval and draftin
 select drilling-only, test-pit-only, or mixed-investigation references and wording
 without deriving quantities from contractor hours.
 
+Immediately above **Generate Word proposal**, **Include Proposed Project Personnel
+section** is checked by default. Uncheck it to omit the complete personnel section.
+When the selected layout has no personnel section, the checked option imports that
+section from an existing historical template while retaining the selected layout.
+
+Word's **Hide White Space** view hides headers and footers on screen. Double-click
+the boundary between pages to restore them; this does not change the document.
+
 The **Generate a complete PDF from a Word proposal** workflow accepts a completed
 Almor Word proposal and creates one PDF containing every proposal page, the
 Standard Terms, and the original fillable Work Authorization form. Proposal facts

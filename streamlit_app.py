@@ -556,6 +556,12 @@ if "proposal_facts" in st.session_state:
 
     st.divider()
     st.subheader("3. Generate the Word proposal")
+    include_proposed_project_personnel = st.checkbox(
+        "Include Proposed Project Personnel section",
+        value=True,
+        key="include_proposed_project_personnel",
+        help="Include the standard project personnel section in the generated Word proposal.",
+    )
     generate_clicked = st.button(
         "Generate Word proposal",
         type="primary",
@@ -572,7 +578,12 @@ if "proposal_facts" in st.session_state:
                     key=lambda match: match.filename != selected_template.name,
                 )
                 draft = ai.draft_content(facts, draft_references, RULES_PATH)
-                docx_bytes, docx_name = build_docx(selected_template, facts, draft)
+                docx_bytes, docx_name = build_docx(
+                    selected_template,
+                    facts,
+                    draft,
+                    include_proposed_project_personnel=include_proposed_project_personnel,
+                )
             st.session_state.generated_outputs = {
                 "docx": docx_bytes,
                 "docx_name": docx_name,
