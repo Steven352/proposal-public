@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import hashlib
+import json
 import os
 
 import pandas as pd
@@ -23,6 +24,7 @@ from proposal_app.costs import (
     standard_cost_items,
 )
 from proposal_app.document_builder import build_standard_docx
+from proposal_app.draft_state import export_draft, import_draft
 from proposal_app.file_ingest import UploadedDocument
 from proposal_app.github_library import (
     GitHubLibrary,
@@ -389,14 +391,55 @@ if "proposal_number" not in st.session_state:
         or st.session_state.get("proposal_facts", {}).get("proposal_number", "").strip()
     )
 proposal_number = st.text_input("Proposal number", placeholder="P026-###", key="proposal_number")
-email_text = st.text_area("Request email", height=220, placeholder="Paste the client's request email here...")
+email_text = st.text_area(
+    "Request email",
+    height=220,
+    placeholder="Paste the client's request email here...",
+    key="request_email",
+)
 request_files = st.file_uploader(
     "Attachments",
     type=["eml", "pdf", "png", "jpg", "jpeg", "docx", "xlsx", "xlsm", "csv", "txt"],
     accept_multiple_files=True,
     help="Upload the request email, screenshots, PDFs, drawings, notes, and cost table.",
 )
-notes = st.text_area("Additional notes", height=100)
+notes = st.text_area("Additional notes", height=100, key="request_notes")
+
+with st.expander("Save or restore draft", expanded=False):
+    st.caption(
+        "A draft saves the current proposal facts, scope and cost edits, request text, and personnel option. "
+        "Uploaded source files are not included; upload them again only if you need to re-run extraction."
+    )
+    draft_upload = st.file_uploader(
+        "Upload an Almor draft",
+        type=["json"],
+        key="draft_restore_upload",
+    )
+    restore_clicked = st.button("Restore draft", key="restore_draft", width="stretch")
+    if restore_clicked:
+        if draft_upload is None:
+            st.error("Choose an Almor draft JSON file first.")
+        else:
+            try:
+                restored = import_draft(json.loads(draft_upload.getvalue().decode("utf-8")))
+                st.session_state.proposal_number = restored.facts.proposal_number
+                st.session_state.request_email = restored.request_email
+                st.session_state.request_notes = restored.notes
+                st.session_state.proposal_facts = restored.facts.model_dump(mode="json")
+                initialize_editor(restored.facts)
+                if restored.scope_rows:
+                    st.session_state.scope_frame = pd.DataFrame(restored.scope_rows)
+                if restored.cost_rows:
+                    st.session_state.cost_frame = pd.DataFrame(restored.cost_rows)
+                st.session_state.include_proposed_project_personnel = restored.include_proposed_project_personnel
+                st.session_state.pop("generated_outputs", None)
+                st.session_state.draft_restore_message = "Draft restored. Review the fields before generating."
+                st.rerun()
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+                st.error(str(error))
+
+if st.session_state.pop("draft_restore_message", None):
+    st.success("Draft restored. Review the fields before generating.")
 
 left, right = st.columns(2)
 with left:
@@ -579,6 +622,26 @@ if "proposal_facts" in st.session_state:
         type="primary",
         width="stretch",
         disabled=bool(missing),
+    )
+    draft_bytes = json.dumps(
+        export_draft(
+            facts=facts,
+            scope_frame=edited_scope,
+            cost_frame=edited_costs,
+            request_email=email_text,
+            notes=notes,
+            include_proposed_project_personnel=include_proposed_project_personnel,
+        ),
+        ensure_ascii=False,
+        indent=2,
+    ).encode("utf-8")
+    st.download_button(
+        "Download draft",
+        data=draft_bytes,
+        file_name=f"{facts.proposal_number or 'almor-proposal'}-draft.json",
+        mime="application/json",
+        width="stretch",
+        help="Save this file to restore the current proposal work later.",
     )
 
     if generate_clicked:

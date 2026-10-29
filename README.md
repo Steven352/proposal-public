@@ -38,6 +38,12 @@ Enter the proposal number once in Step 1. That value is used in the proposal,
 every project header and the download filename. Changing it removes the previous
 download so the document can be regenerated with the new number.
 
+After the proposal editor opens, **Download draft** saves a portable JSON
+checkpoint containing the current facts, scope edits, cost edits, request text,
+notes, and personnel option. Use **Save or restore draft → Upload an Almor draft
+→ Restore draft** in a later session to continue. Original uploaded source files
+are intentionally not embedded; upload them again only when re-running extraction.
+
 Immediately above **Generate Word proposal**, **Include Proposed Project Personnel
 section** is checked by default. Uncheck it to omit the complete personnel section.
 When the selected layout has no personnel section, the checked option imports that
