@@ -96,6 +96,18 @@ def paragraphs_between(document: DocumentType, start: str, end: str | None) -> l
     return paragraphs[start_index + 1 : end_index]
 
 
+def following_section_heading(document: DocumentType, start_heading: str) -> Paragraph:
+    """Find the template's section boundary without assuming its heading wording."""
+    start = paragraph_by_text(document, start_heading)
+    for paragraph in paragraphs_between(document, start_heading, None):
+        if paragraph.text.strip() and (
+            paragraph.style.style_id == start.style.style_id
+            or paragraph.text.strip() == "Geotechnical Field Program"
+        ):
+            return paragraph
+    raise ValueError(f"No following section heading found after {start_heading}")
+
+
 def replace_xml_paragraph_text(paragraph_xml, text: str) -> None:
     text_nodes = paragraph_xml.xpath(".//w:t")
     if not text_nodes:
@@ -449,11 +461,10 @@ def configure_personnel_section(
 ) -> None:
     """Keep/remove the complete section, or import its approved template wording."""
     heading = "Proposed Project Personnel"
-    following_heading = "Scope of Work and Cost Summary"
     existing = next((p for p in document.paragraphs if p.text.strip() == heading), None)
     if existing is not None:
         if not include:
-            end = paragraph_by_text(document, following_heading)._p
+            end = following_section_heading(document, heading)._p
             node = existing._p
             while node is not end:
                 following = node.getnext()
@@ -463,18 +474,22 @@ def configure_personnel_section(
     if not include:
         return
 
-    anchor = paragraph_by_text(document, following_heading)
+    anchor = following_section_heading(document, "Introduction")
     for path in sorted(templates_dir.glob("*.docx")):
         if path.name.startswith("~$"):
             continue
         source = Document(path)
         headings = [p.text.strip() for p in source.paragraphs]
-        if heading not in headings or following_heading not in headings:
+        if heading not in headings:
             continue
-        start, end = headings.index(heading), headings.index(following_heading)
-        if end <= start:
+        try:
+            end_heading = following_section_heading(source, heading)
+        except ValueError:
             continue
-        for paragraph in source.paragraphs[start:end]:
+        personnel_paragraphs = [paragraph_by_text(source, heading)] + paragraphs_between(
+            source, heading, end_heading.text.strip()
+        )
+        for paragraph in personnel_paragraphs:
             clone = deepcopy(paragraph._p)
             # A section break belongs to the source document, never the imported bio.
             for section in clone.xpath("./w:pPr/w:sectPr"):
@@ -506,9 +521,7 @@ def build_docx(
     replace_section(
         document,
         "Introduction",
-        "Proposed Project Personnel" if any(
-            p.text.strip() == "Proposed Project Personnel" for p in document.paragraphs
-        ) else "Scope of Work and Cost Summary",
+        following_section_heading(document, "Introduction").text.strip(),
         [ParagraphBlock(text=draft.introduction, style="body")],
     )
 
