@@ -52,6 +52,20 @@ def safe_filename(value: str) -> str:
     return cleaned or "Proposal"
 
 
+def display_title(value: str) -> str:
+    """Normalize display names while retaining legal identifiers and abbreviations."""
+    abbreviations = {word: word.upper() for word in (
+        "inc", "ltd", "llc", "ab", "bc", "sw", "se", "nw", "ne", "c/o", "ats"
+    )}
+    abbreviations.update({"inc": "Inc", "ltd": "Ltd"})
+    def title_word(match):
+        word = match.group(0)
+        if any(char.isdigit() for char in word):
+            return word.upper()
+        return abbreviations.get(word.lower(), word.title())
+    return re.sub(r"[\w/]+", title_word, value)
+
+
 def output_stem(facts: ProposalFacts) -> str:
     number = safe_filename(facts.proposal_number) if facts.proposal_number.strip() else ""
     project = safe_filename(facts.project_name) if facts.project_name.strip() else ""
@@ -155,6 +169,12 @@ def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None
                     run.font.size = Pt(9 if index == 0 else 8)
                     run.font.color.rgb = RGBColor(102, 51, 0)
                     run.bold = index == 0
+            border = OxmlElement("w:pBdr")
+            bottom = OxmlElement("w:bottom")
+            for key, value in (("val", "single"), ("sz", "6"), ("space", "6"), ("color", "663300")):
+                bottom.set(qn("w:" + key), value)
+            border.append(bottom)
+            header.paragraphs[-1]._p.get_or_add_pPr().append(border)
 
 
 def apply_standard_cost_table(document: DocumentType, existing: Table) -> Table:
@@ -772,6 +792,11 @@ def build_docx(
     standard_layout: bool = False,
 ) -> tuple[bytes, str]:
     document = Document(template_path)
+    if standard_layout:
+        facts = facts.model_copy(update={key: display_title(getattr(facts, key)) for key in (
+            "client_name", "client_address", "contact_name", "contact_title",
+            "project_name", "project_location",
+        )})
     configure_personnel_section(document, include_proposed_project_personnel)
     old_values = update_front_matter(document, facts)
     if standard_layout:
@@ -812,6 +837,8 @@ def build_docx(
         raise ValueError("Selected proposal terms section is incompatible.")
     update_closure(document, facts)
     if standard_layout:
+        identifier = next(p for p in reversed(document.paragraphs) if p.text.strip())
+        set_paragraph_text(identifier, display_title(identifier.text))
         format_standard_closure(document)
         document.core_properties.title = output_stem(facts)
         document.core_properties.subject = "Proposal for Geotechnical Services"
