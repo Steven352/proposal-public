@@ -24,7 +24,9 @@ class ReferenceTemplateTest(unittest.TestCase):
         self.assertNotIn("P026-187", body)
 
     def test_generation_preserves_reference_front_matter_slots(self):
-        data, _ = document_builder.build_standard_docx(sample_facts(), sample_draft())
+        data, _ = document_builder.build_standard_docx(
+            sample_facts(), sample_draft(), include_proposed_project_personnel=False
+        )
         document = Document(io.BytesIO(data))
         body = "\n".join(p.text for p in document.paragraphs)
         self.assertIn("Attention: Alex Example", body)
@@ -34,6 +36,12 @@ class ReferenceTemplateTest(unittest.TestCase):
         self.assertNotIn("Client Contact", body)
         first_header = " ".join(document.sections[0].first_page_header._element.xpath(".//w:t/text()"))
         self.assertNotIn("Project Name", first_header)
+        repeating = document.sections[0].header
+        self.assertEqual(repeating.paragraphs[0].style.name, "Header Client name")
+        self.assertEqual(repeating.paragraphs[1].style.name, "Header Body")
+        self.assertEqual(repeating.paragraphs[0].runs[0].font.size.pt, 9)
+        self.assertEqual(repeating.paragraphs[1].runs[0].font.size.pt, 8)
+        self.assertEqual(str(repeating.paragraphs[1].runs[0].font.color.rgb), "663300")
 
 
 if __name__ == "__main__":

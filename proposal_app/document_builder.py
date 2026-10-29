@@ -134,15 +134,18 @@ def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None
                 header._element.remove(child)
             for index, value in enumerate(values):
                 paragraph = header.add_paragraph(value)
+                style_name = "Header Client name" if index == 0 else "Header Body"
+                if style_name in document.styles:
+                    paragraph.style = document.styles[style_name]
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 fmt = paragraph.paragraph_format
                 fmt.space_before = fmt.space_after = Pt(0)
                 fmt.line_spacing = 1
                 for run in paragraph.runs:
                     run.font.name = "Arial"
-                    run.font.size = Pt(8)
-                    run.font.color.rgb = RGBColor(0, 0, 0)
-                    run.bold = index == 3
+                    run.font.size = Pt(9 if index == 0 else 8)
+                    run.font.color.rgb = RGBColor(102, 51, 0)
+                    run.bold = index == 0
 
 
 def apply_standard_cost_table(document: DocumentType, existing: Table) -> Table:
@@ -339,6 +342,45 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         if old_number:
             replace_text_across_nodes(date_line_nodes, old_number, facts.proposal_number)
         old_re_lines = preceding[re_index].text.splitlines()
+        location_index = re_index + 1 if re_index + 1 < len(preceding) else None
+        separate_location = bool(
+            location_index is not None and preceding[location_index].text.strip()
+        )
+        if separate_location:
+            client_index = next(
+                (index for index in range(1, attention_index) if preceding[index].text.strip()),
+                None,
+            )
+            old_client = (
+                preceding[client_index].text.splitlines()[0].strip()
+                if client_index is not None else ""
+            )
+            old_location = preceding[location_index].text.strip()
+            client_block = "\n".join(
+                value for value in [facts.client_name, facts.client_address] if value.strip()
+            )
+            if client_index is not None:
+                set_paragraph_text(preceding[client_index], client_block)
+            attention = f"Attention: {facts.contact_name}" if facts.contact_name else ""
+            if facts.contact_title and facts.contact_name:
+                attention = f"Attention: {facts.contact_name}, {facts.contact_title}"
+            if facts.contact_email:
+                attention = f"{attention} | {facts.contact_email}" if attention else facts.contact_email
+            set_paragraph_text(preceding[attention_index], attention)
+            set_paragraph_text(
+                preceding[re_index],
+                "Re:\tRequest for Proposal for Geotechnical Services",
+            )
+            set_paragraph_text(
+                preceding[location_index],
+                "\n".join([facts.project_name, *[line.strip() for line in facts.project_location.splitlines() if line.strip()]]),
+            )
+            return {
+                "old_number": old_number,
+                "old_client": old_client,
+                "old_project": "",
+                "old_location": old_location,
+            }
         old_project = old_re_lines[1].strip() if len(old_re_lines) > 1 else ""
         old_location = "\n".join(line.strip() for line in old_re_lines[2:] if line.strip())
         attention = f"Attention: {facts.contact_name}" if facts.contact_name else ""

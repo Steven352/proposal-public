@@ -26,7 +26,7 @@ select drilling-only, test-pit-only, or mixed-investigation references and wordi
 without deriving quantities from contractor hours.
 
 Every generated Word proposal uses the same standard Almor layout, based on the
-supplied P026-187 Road Structure Assessment reference and packaged as
+supplied P026-168 902 to 916 67 Ave S.W. reference and packaged as
 `data/templates/standard_proposal.docx`. Historical matches provide writing
 examples only. They do not select page layout, headers, styles, standard
 sections, or the cost table. The cost table uses one fixed six-column format with
