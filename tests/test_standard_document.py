@@ -148,6 +148,26 @@ class StandardDocumentTest(unittest.TestCase):
             self.assertNotIn("P026-111", text)
             self.assertNotIn("P026-222", text)
 
+    def test_standard_field_program_keeps_fixed_template_wording(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            draft = sample_draft().model_copy(update={
+                "field_program_intro": "AI must not replace the fixed field-program wording.",
+            })
+            result, _ = self.build(base, draft=draft)
+        text = "\n".join(p.text for p in result.paragraphs)
+        fixed = (
+            "The geotechnical field program could be initiated within two weeks subject to rig availability "
+            "and locates, subsequent to authorization. The estimated costs do not include environmental "
+            "considerations of the development.  The field program will include geotechnical boreholes "
+            "advanced using a track mounted solid stem auger drilling rig. It is our understanding access "
+            "and clearing, if required, to the boreholes is suitable for a track mounted drilling rig and "
+            "will be provided by the client as this work is outside the scope of our proposal.  The proposed "
+            "scope of work for this project includes:"
+        )
+        self.assertIn(fixed, text)
+        self.assertNotIn("AI must not replace", text)
+
     def test_missing_dedicated_template_uses_only_the_fixed_approved_reference(self):
         with tempfile.TemporaryDirectory() as directory:
             library = Path(directory)

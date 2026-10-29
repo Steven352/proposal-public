@@ -29,6 +29,15 @@ STANDPIPE_SCOPE = (
     "cuttings and capped with bentonite. Groundwater readings will be taken at the end of "
     "drilling and during one follow-up visit two weeks after the field program."
 )
+STANDARD_FIELD_PROGRAM_WORDING = (
+    "The geotechnical field program could be initiated within two weeks subject to rig availability "
+    "and locates, subsequent to authorization. The estimated costs do not include environmental "
+    "considerations of the development.  The field program will include geotechnical boreholes "
+    "advanced using a track mounted solid stem auger drilling rig. It is our understanding access "
+    "and clearing, if required, to the boreholes is suitable for a track mounted drilling rig and "
+    "will be provided by the client as this work is outside the scope of our proposal.  The proposed "
+    "scope of work for this project includes:"
+)
 
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 STANDARD_COST_WIDTHS = (3114, 3580, 528, 510, 1312, 928)
@@ -775,7 +784,12 @@ def build_docx(
         [ParagraphBlock(text=draft.introduction, style="body")],
     )
 
-    field_blocks = [ParagraphBlock(text=draft.field_program_intro, style="body")]
+    if standard_layout:
+        # This paragraph is template-controlled and must remain verbatim;
+        # generated project-specific bullets follow it without rewriting it.
+        field_blocks = [ParagraphBlock(text=STANDARD_FIELD_PROGRAM_WORDING, style="body")]
+    else:
+        field_blocks = [ParagraphBlock(text=draft.field_program_intro, style="body")]
     field_blocks.extend(draft.field_program_paragraphs)
     replace_section(
         document,
