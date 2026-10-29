@@ -30,6 +30,9 @@ STANDPIPE_SCOPE = (
     "drilling and during one follow-up visit two weeks after the field program."
 )
 STANDARD_FIELD_PROGRAM_WORDING = (
+    "Based on information supplied by the Client, Almor provides the following estimated cost "
+    "to perform the geotechnical assessment, and any additional work directed by the Client "
+    "will constitute a change in the scope of work. "
     "The geotechnical field program could be initiated within two weeks subject to rig availability "
     "and locates, subsequent to authorization. The estimated costs do not include environmental "
     "considerations of the development.  The field program will include geotechnical boreholes "

@@ -157,6 +157,9 @@ class StandardDocumentTest(unittest.TestCase):
             result, _ = self.build(base, draft=draft)
         text = "\n".join(p.text for p in result.paragraphs)
         fixed = (
+            "Based on information supplied by the Client, Almor provides the following estimated cost "
+            "to perform the geotechnical assessment, and any additional work directed by the Client "
+            "will constitute a change in the scope of work. "
             "The geotechnical field program could be initiated within two weeks subject to rig availability "
             "and locates, subsequent to authorization. The estimated costs do not include environmental "
             "considerations of the development.  The field program will include geotechnical boreholes "
