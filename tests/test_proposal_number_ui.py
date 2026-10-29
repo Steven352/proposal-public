@@ -1,4 +1,5 @@
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,6 +40,28 @@ class ProposalNumberUITest(unittest.TestCase):
 
     def number_fields(self, app):
         return [field for field in app.text_input if field.label == "Proposal number"]
+
+    def test_restore_draft_updates_existing_widgets_and_editor(self):
+        import streamlit as st
+        from proposal_app.draft_state import DRAFT_SCHEMA
+        payload = {"schema": DRAFT_SCHEMA, "version": 1,
+                   "facts": {"proposal_number": "P026-888", "client_name": "Restored Client"},
+                   "request_email": "Saved request", "notes": "Saved notes",
+                   "include_proposed_project_personnel": False}
+        original = st.file_uploader
+        def upload(label, *args, **kwargs):
+            if label == "Upload an Almor draft":
+                return io.BytesIO(json.dumps(payload).encode())
+            return original(label, *args, **kwargs)
+        with patch("streamlit.file_uploader", side_effect=upload):
+            app = self.app()
+            self.click(app, "Enter manually")
+            self.click(app, "Restore draft")
+            self.assertFalse(app.error)
+            self.assertEqual(self.number_fields(app)[0].value, "P026-888")
+            self.assertEqual(app.text_input(key="edit_client_name").value, "Restored Client")
+            self.assertEqual(app.text_area(key="request_email").value, "Saved request")
+            self.assertFalse(app.checkbox(key="include_proposed_project_personnel").value)
 
     def click(self, app, label):
         next(button for button in app.button if button.label == label).click().run()

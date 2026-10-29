@@ -384,6 +384,22 @@ with st.expander("How it works", expanded=False):
         "explicitly confirm is saved to the private proposal library."
     )
 
+pending_draft = st.session_state.pop("pending_draft_restore", None)
+if pending_draft is not None:
+    restored = import_draft(pending_draft)
+    st.session_state.proposal_number = restored.facts.proposal_number
+    st.session_state.request_email = restored.request_email
+    st.session_state.request_notes = restored.notes
+    st.session_state.proposal_facts = restored.facts.model_dump(mode="json")
+    initialize_editor(restored.facts)
+    if restored.scope_rows:
+        st.session_state.scope_frame = pd.DataFrame(restored.scope_rows)
+    if restored.cost_rows:
+        st.session_state.cost_frame = pd.DataFrame(restored.cost_rows)
+    st.session_state.include_proposed_project_personnel = restored.include_proposed_project_personnel
+    st.session_state.pop("generated_outputs", None)
+    st.session_state.draft_restore_message = "Draft restored. Review the fields before generating."
+
 st.subheader("1. Add the request")
 if "proposal_number" not in st.session_state:
     st.session_state.proposal_number = (
@@ -421,19 +437,9 @@ with st.expander("Save or restore draft", expanded=False):
             st.error("Choose an Almor draft JSON file first.")
         else:
             try:
-                restored = import_draft(json.loads(draft_upload.getvalue().decode("utf-8")))
-                st.session_state.proposal_number = restored.facts.proposal_number
-                st.session_state.request_email = restored.request_email
-                st.session_state.request_notes = restored.notes
-                st.session_state.proposal_facts = restored.facts.model_dump(mode="json")
-                initialize_editor(restored.facts)
-                if restored.scope_rows:
-                    st.session_state.scope_frame = pd.DataFrame(restored.scope_rows)
-                if restored.cost_rows:
-                    st.session_state.cost_frame = pd.DataFrame(restored.cost_rows)
-                st.session_state.include_proposed_project_personnel = restored.include_proposed_project_personnel
-                st.session_state.pop("generated_outputs", None)
-                st.session_state.draft_restore_message = "Draft restored. Review the fields before generating."
+                payload = json.loads(draft_upload.getvalue().decode("utf-8"))
+                import_draft(payload)  # Validate before changing the active proposal.
+                st.session_state.pending_draft_restore = payload
                 st.rerun()
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
                 st.error(str(error))
@@ -611,9 +617,10 @@ if "proposal_facts" in st.session_state:
 
     st.divider()
     st.subheader("3. Generate the Word proposal")
+    if "include_proposed_project_personnel" not in st.session_state:
+        st.session_state.include_proposed_project_personnel = True
     include_proposed_project_personnel = st.checkbox(
         "Include Proposed Project Personnel section",
-        value=True,
         key="include_proposed_project_personnel",
         help="Include the standard project personnel section in the generated Word proposal.",
     )
