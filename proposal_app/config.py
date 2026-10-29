@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
 HISTORICAL_DIR = DATA_DIR / "historical_proposals"
+# Private deployments can provide a dedicated approved layout here.
+STANDARD_TEMPLATE_PATH = DATA_DIR / "templates" / "standard_proposal.docx"
 ASSET_DIR = DATA_DIR / "assets"
 KNOWLEDGE_DIR = ROOT_DIR / "knowledge"
 KNOWLEDGE_INDEX = KNOWLEDGE_DIR / "proposal_index.json"

@@ -38,18 +38,13 @@ Use the current proposal facts and cost table as the only authority for project-
 historical proposal excerpts are controlled writing examples; never copy their client, contact,
 address, proposal number, project, quantities, depths or fees.
 
-Reference 1 is the controlling Word template. Treat every part of it as controlled copy, including
-the introduction, personnel, scope, cost-section lead-in, fee wording, terms, closure, headings,
-paragraph order, bullet order, and level of detail. It is not material to improve or paraphrase. If
-wording is factually correct and applicable, reproduce it unchanged. Make only the minimum edits
-required to replace project-specific facts, correct a factual conflict, update quantities or fees, or
-remove a wholly unsupported clause. Prefer exact word, number, or short-phrase substitutions over
-rewriting a sentence. Do not modernize, simplify, condense, expand, polish, reorganize, merge, split,
-or vary wording merely for style. Do not mix alternate wording from References 2 or 3 into the
-controlling template. User-provided or user-approved text has priority and must be preserved verbatim
-except for an explicitly required factual correction. When a clause is not applicable, omit that
-clause without rewriting adjacent clauses. Minimum necessary change is the governing rule for the
-entire proposal, not only the scope of work.
+All proposals use one fixed Almor Word layout. Historical references are writing examples only;
+they never select the Word template, headings, headers, personnel layout, fee table, terms or
+signature layout. This requirement takes precedence over historical layout suggestions in the rules.
+Use relevant examples to help write the current introduction and technical scope in Almor's style.
+Preserve applicable approved wording and make only changes needed for the current facts and scope.
+Never retain a historical client, project, location, proposal number or fee. User-provided or
+user-approved text has priority except where an explicitly required factual correction is necessary.
 
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
 borehole/test-pit quantities or depths from hours. In the Scope of Work, do not name actual laboratory
@@ -72,12 +67,11 @@ penetrometer testing where possible, disturbed sampling, groundwater observation
 GPS, and backfilling with excavated material. Do not use drilling, SPT, piezometer, or drill-cuttings
 wording for a test-pit-only program unless separately supported. When both programs are supplied,
 describe their quantity/depth groups separately.
-Keep the controlling template's exact standard clauses and structure. Do not produce headings because
-the Word assembler supplies them. field_program_paragraphs should preserve the controlling template's
-paragraph and bullet order; use style=list for its actual list items and style=body for its existing
-lead-ins or closing field-program paragraphs. cost_intro, terms_and_conditions, closure_paragraph_1,
-and closure_paragraph_2 must copy the corresponding controlling-template wording verbatim unless a
-specific current-project fact makes the smallest possible correction necessary.
+Do not produce headings because the fixed Word assembler supplies them. Use style=list for scope
+items and style=body for lead-ins or closing field-program paragraphs. cost_intro must contain prose
+only, never a Markdown or text table; the assembler creates the single authoritative fee table from
+the current cost items. The assembler controls standard personnel, terms and closing/signature copy;
+historical examples must not change those sections or the document layout.
 
 The email must be short, use the external client email in the To line, include the proposal number and
 project name in the subject, greet the client's first name, and ask the client to sign and return the

@@ -22,7 +22,7 @@ from proposal_app.costs import (
     normalize_cost_items,
     standard_cost_items,
 )
-from proposal_app.document_builder import build_docx
+from proposal_app.document_builder import build_standard_docx
 from proposal_app.file_ingest import UploadedDocument
 from proposal_app.github_library import (
     GitHubLibrary,
@@ -31,7 +31,7 @@ from proposal_app.github_library import (
     empty_state,
     sync_runtime_knowledge,
 )
-from proposal_app.knowledge import choose_template, load_index, retrieve_references
+from proposal_app.knowledge import load_index, retrieve_references
 from proposal_app.investigation import (
     format_investigation_program,
     infer_methods_from_cost_items,
@@ -291,7 +291,7 @@ def facts_from_editor(
         methods.add("test pits")
     methods.update(infer_methods_from_cost_items(cost_items))
     return ProposalFacts(
-        proposal_number=st.session_state.edit_proposal_number.strip(),
+        proposal_number=st.session_state.proposal_number.strip(),
         proposal_date=st.session_state.edit_proposal_date.isoformat(),
         client_name=st.session_state.edit_client_name.strip(),
         client_address=st.session_state.edit_client_address.strip(),
@@ -340,7 +340,6 @@ def initialize_editor(facts: ProposalFacts) -> None:
         facts.test_pit_depth_m,
     )
     defaults = {
-        "edit_proposal_number": facts.proposal_number,
         "edit_proposal_date": date.fromisoformat(facts.proposal_date),
         "edit_client_name": facts.client_name,
         "edit_client_address": facts.client_address,
@@ -384,7 +383,12 @@ with st.expander("How it works", expanded=False):
     )
 
 st.subheader("1. Add the request")
-proposal_number = st.text_input("Proposal number", placeholder="P026-###")
+if "proposal_number" not in st.session_state:
+    st.session_state.proposal_number = (
+        (st.session_state.get("edit_proposal_number") or "").strip()
+        or st.session_state.get("proposal_facts", {}).get("proposal_number", "").strip()
+    )
+proposal_number = st.text_input("Proposal number", placeholder="P026-###", key="proposal_number")
 email_text = st.text_area("Request email", height=220, placeholder="Paste the client's request email here...")
 request_files = st.file_uploader(
     "Attachments",
@@ -412,7 +416,9 @@ if analyze_clicked:
                     documents=uploaded_documents(request_files),
                     proposal_number=proposal_number,
                 )
-                facts = prepare_extracted_facts(facts)
+                facts = prepare_extracted_facts(
+                    facts.model_copy(update={"proposal_number": proposal_number.strip()})
+                )
             st.session_state.proposal_facts = facts.model_dump(mode="json")
             initialize_editor(facts)
             st.session_state.pop("generated_outputs", None)
@@ -442,7 +448,6 @@ if "proposal_facts" in st.session_state:
     with project_tab:
         col1, col2 = st.columns(2)
         with col1:
-            st.text_input("Proposal number", key="edit_proposal_number")
             st.date_input("Proposal date", key="edit_proposal_date")
             st.text_input("Client", key="edit_client_name")
             st.text_area("Client address", key="edit_client_address", height=90)
@@ -539,15 +544,22 @@ if "proposal_facts" in st.session_state:
         st.metric("Estimated Cost", f"${preview.final_total:,.2f}")
 
     facts = facts_from_editor(current, edited_costs, edited_scope)
+    if facts.proposal_number != current.proposal_number:
+        st.session_state.pop("generated_outputs", None)
     st.session_state.proposal_facts = facts.model_dump(mode="json")
     missing = st.session_state.get("scope_program_errors", []) + validate_facts(facts)
+    if not facts.proposal_number:
+        missing.append("Enter the proposal number in Step 1")
     if missing:
         st.warning("Please resolve before generating: " + "; ".join(missing))
 
     references = retrieve_references(facts)
     if references:
-        selected_template = choose_template(references)
         with st.expander("Historical proposal matches", expanded=False):
+            st.caption(
+                "Historical proposals guide the scope and wording. "
+                "Word formatting uses the standard Almor template."
+            )
             for match in references[:5]:
                 st.write(
                     f"**{match.filename}** — {match.project_type}; "
@@ -571,15 +583,10 @@ if "proposal_facts" in st.session_state:
 
     if generate_clicked:
         try:
-            with st.spinner("Writing and assembling the closest-matching geotechnical proposal..."):
+            with st.spinner("Writing the proposal and applying the standard Almor layout..."):
                 ai = api_client()
-                draft_references = sorted(
-                    references,
-                    key=lambda match: match.filename != selected_template.name,
-                )
-                draft = ai.draft_content(facts, draft_references, RULES_PATH)
-                docx_bytes, docx_name = build_docx(
-                    selected_template,
+                draft = ai.draft_content(facts, references, RULES_PATH)
+                docx_bytes, docx_name = build_standard_docx(
                     facts,
                     draft,
                     include_proposed_project_personnel=include_proposed_project_personnel,
@@ -587,11 +594,15 @@ if "proposal_facts" in st.session_state:
             st.session_state.generated_outputs = {
                 "docx": docx_bytes,
                 "docx_name": docx_name,
-                "template": selected_template.name,
+                "template": "Standard Almor proposal template",
             }
             st.success("Word proposal generated. Review it, then upload the reviewed Word file in Step 4.")
         except Exception as error:
             st.error(str(error))
+
+previous_output = st.session_state.get("generated_outputs")
+if previous_output and previous_output.get("template") != "Standard Almor proposal template":
+    st.session_state.pop("generated_outputs", None)
 
 if "generated_outputs" in st.session_state:
     output = st.session_state.generated_outputs

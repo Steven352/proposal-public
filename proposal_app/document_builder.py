@@ -9,11 +9,16 @@ from pathlib import Path
 
 from docx import Document
 from docx.document import Document as DocumentType
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor, Twips
 from docx.table import Table, _Row
 from docx.text.paragraph import Paragraph
 from lxml import etree
 
-from .config import HISTORICAL_DIR, SECTION_ORDER
+from .config import HISTORICAL_DIR, SECTION_ORDER, STANDARD_TEMPLATE_PATH
 from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
 
@@ -26,6 +31,10 @@ STANDPIPE_SCOPE = (
 )
 
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+STANDARD_COST_WIDTHS = (3114, 3580, 528, 510, 1312, 928)
+STANDARD_CLOSING = (
+    "Almor is interested in supporting the successful design and construction of the proposed project."
+)
 
 
 def safe_filename(value: str) -> str:
@@ -74,6 +83,148 @@ def set_cell_text(cell, text: str) -> None:
     set_paragraph_text(paragraph, text)
     for extra in cell.paragraphs[1:]:
         extra._element.getparent().remove(extra._element)
+
+
+def clean_cost_intro(text: str) -> str:
+    return " ".join(line.strip() for line in text.splitlines() if line.strip() and "|" not in line)
+
+
+def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None:
+    """Populate native repeating headers, preserving the first-page company letterhead."""
+    values = [
+        facts.client_name,
+        "Proposal for Geotechnical Services",
+        ", ".join(value.replace("\n", ", ") for value in
+                  (facts.project_name, facts.project_location) if value.strip()),
+        f"Almor Proposal No.: {facts.proposal_number}",
+    ]
+    seen = set()
+    for section in document.sections:
+        original_header_distance = section.header_distance
+        section.header_distance = Inches(0.25)
+        for header, first_page in (
+            (section.header, False), (section.even_page_header, False),
+            (section.first_page_header, True),
+        ):
+            if header.part.partname in seen:
+                continue
+            seen.add(header.part.partname)
+            old_text = " ".join(header._element.xpath(".//w:t/text()"))
+            if first_page and "Proposal for Geotechnical Services" not in old_text:
+                # Keep the letterhead at its original page position when moving
+                # the repeating text header closer to the top of later pages.
+                for position in header._element.xpath(
+                    ".//wp:positionV[@relativeFrom='paragraph']"
+                ):
+                    offset = position.find(qn("wp:posOffset"))
+                    if offset is not None:
+                        offset.text = str(int(offset.text) + int(original_header_distance or 0))
+                        position.set("relativeFrom", "page")
+                continue
+            # Textbox drawing/VML copies can disagree and clip long project names.
+            # Native paragraphs give every page the same current facts and wrapping.
+            for child in list(header._element):
+                header._element.remove(child)
+            for index, value in enumerate(values):
+                paragraph = header.add_paragraph(value)
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                fmt = paragraph.paragraph_format
+                fmt.space_before = fmt.space_after = Pt(0)
+                fmt.line_spacing = 1
+                for run in paragraph.runs:
+                    run.font.name = "Arial"
+                    run.font.size = Pt(8)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+                    run.bold = index == 3
+
+
+def apply_standard_cost_table(document: DocumentType, existing: Table) -> Table:
+    """Create one regular grid; historical merged cells and styles cannot affect it."""
+    table = document.add_table(rows=5, cols=6)
+    set_row_values(table.rows[0], ["Item", "Description", "Unit", "Est.", "Rate", "Total"])
+    existing._tbl.addprevious(table._tbl)
+    existing._tbl.getparent().remove(existing._tbl)
+    return table
+
+
+def format_standard_cost_table(table: Table) -> None:
+    table.autofit = False
+    for column, width in zip(table.columns, STANDARD_COST_WIDTHS, strict=True):
+        column.width = Twips(width)
+    properties = table._tbl.tblPr
+    borders = OxmlElement("w:tblBorders")
+    for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        border = OxmlElement("w:" + side)
+        for key, value in (("val", "single"), ("sz", "4"), ("color", "D9D9D9")):
+            border.set(qn("w:" + key), value)
+        borders.append(border)
+    properties.append(borders)
+    for index, row in enumerate(table.rows):
+        row_properties = row._tr.get_or_add_trPr()
+        row_properties.append(OxmlElement("w:cantSplit"))
+        if index == 0:
+            row_properties.append(OxmlElement("w:tblHeader"))
+        section_row = bool(row.cells[0].text) and all(not cell.text for cell in row.cells[1:])
+        total_row = row.cells[4].text in ("Subtotal", "Estimated Cost")
+        fill = "D6DBD9" if index == 0 or index % 2 else "FFFFFF"
+        for column_index, (cell, width) in enumerate(zip(row.cells, STANDARD_COST_WIDTHS, strict=True)):
+            cell.width = Twips(width)
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            cell_properties = cell._tc.get_or_add_tcPr()
+            shading = OxmlElement("w:shd")
+            shading.set(qn("w:fill"), fill)
+            cell_properties.append(shading)
+            margins = OxmlElement("w:tcMar")
+            for side in ("top", "left", "bottom", "right"):
+                margin = OxmlElement("w:" + side)
+                margin.set(qn("w:w"), "50" if side in ("left", "right") else "0")
+                margin.set(qn("w:type"), "dxa")
+                margins.append(margin)
+            cell_properties.append(margins)
+            if index == 0:
+                cell_properties.append(OxmlElement("w:noWrap"))
+            for paragraph in cell.paragraphs:
+                paragraph.style = "Normal"
+                paragraph.alignment = (
+                    WD_ALIGN_PARAGRAPH.RIGHT if column_index >= 4 else
+                    WD_ALIGN_PARAGRAPH.CENTER if column_index in (2, 3) else
+                    WD_ALIGN_PARAGRAPH.LEFT
+                )
+                fmt = paragraph.paragraph_format
+                fmt.space_before = Pt(0)
+                fmt.space_after = Pt(8)
+                fmt.line_spacing = 1.07917
+                fmt.keep_with_next = index == 0 or section_row
+                for run in paragraph.runs:
+                    run.font.name = "Arial"
+                    run.font.size = Pt(8)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+                    run.bold = index == 0 or section_row or (total_row and column_index >= 4)
+
+
+def format_standard_closure(document: DocumentType) -> None:
+    paragraphs = paragraphs_between(document, "Closure", None)
+    set_paragraph_text(paragraphs[0], STANDARD_CLOSING)
+    paragraph_by_text(document, "Closure").paragraph_format.keep_with_next = True
+    for paragraph in paragraphs:
+        paragraph.paragraph_format.keep_with_next = True
+    start = next(i for i, p in enumerate(paragraphs) if "Prepared by" in p.text)
+    for index, paragraph in enumerate(paragraphs[start:]):
+        # Replace inherited tabs/breaks that split the names onto a separate page.
+        if paragraph._p.pPr is not None:
+            paragraph._p.remove(paragraph._p.pPr)
+        paragraph.style = "Body" if "Body" in document.styles else "Normal"
+        parts = [part.strip() for part in paragraph.text.split("\t") if part.strip()]
+        if len(parts) == 2:
+            set_paragraph_text(paragraph, "\t".join(parts))
+        fmt = paragraph.paragraph_format
+        fmt.tab_stops.add_tab_stop(Inches(3.45))
+        fmt.space_before = Pt(55 if index == 1 else 0)
+        fmt.space_after = Pt(6)
+        fmt.keep_with_next = index < len(paragraphs[start:]) - 1
+        for run in paragraph.runs:
+            run.font.name = "Arial"
+            run.font.size = Pt(8 if index == len(paragraphs[start:]) - 1 else 11)
 
 
 def paragraph_by_text(document: DocumentType, text: str) -> Paragraph:
@@ -281,7 +432,7 @@ def update_cost_section(
     paragraphs = [Paragraph(node, document) for node in between if node.tag.endswith("}p")]
     if len(paragraphs) < 2:
         raise ValueError("Selected proposal cost section is incompatible.")
-    set_paragraph_text(paragraphs[0], draft.cost_intro)
+    set_paragraph_text(paragraphs[0], clean_cost_intro(draft.cost_intro))
     total_text, replacements = re.subn(
         r"\$[\d,]+\.\d{2}",
         format_money(final_total),
@@ -335,15 +486,13 @@ def patch_package_text(docx_bytes: bytes, replacements: dict[str, str]) -> bytes
 
 def replace_text_across_nodes(text_nodes: list, old: str, new: str) -> bool:
     """Replace text without collapsing the template's separately formatted runs."""
-    changed = False
-    while True:
+    if not old or old == new:
+        return False
+    combined = "".join(node.text or "" for node in text_nodes)
+    matches = [match.span() for match in re.finditer(re.escape(old), combined)]
+    # Work backward through original matches so inserted text is never searched again.
+    for start, end in reversed(matches):
         values = [node.text or "" for node in text_nodes]
-        combined = "".join(values)
-        start = combined.rfind(old)
-        if start < 0:
-            return changed
-        end = start + len(old)
-
         offsets = []
         cursor = 0
         for value in values:
@@ -369,7 +518,7 @@ def replace_text_across_nodes(text_nodes: list, old: str, new: str) -> bool:
             text_nodes[end_index].text = suffix
             if suffix:
                 text_nodes[end_index].set(XML_SPACE, "preserve")
-        changed = True
+    return bool(matches)
 
 
 def find_header_location_replacements(
@@ -513,10 +662,14 @@ def build_docx(
     facts: ProposalFacts,
     draft: DraftContent,
     include_proposed_project_personnel: bool = True,
+    *,
+    standard_layout: bool = False,
 ) -> tuple[bytes, str]:
     document = Document(template_path)
     configure_personnel_section(document, include_proposed_project_personnel)
     old_values = update_front_matter(document, facts)
+    if standard_layout:
+        update_project_headers(document, facts)
 
     replace_section(
         document,
@@ -537,12 +690,20 @@ def build_docx(
     cost_table = next((table for table in document.tables if len(table.columns) == 6), None)
     if cost_table is None:
         raise ValueError("Selected proposal does not contain a compatible six-column cost table.")
+    if standard_layout:
+        cost_table = apply_standard_cost_table(document, cost_table)
     final_total = update_cost_table(cost_table, facts)
+    if standard_layout:
+        format_standard_cost_table(cost_table)
     update_cost_section(document, draft, facts, final_total)
 
     if not paragraphs_between(document, "Terms and Conditions", "Closure"):
         raise ValueError("Selected proposal terms section is incompatible.")
     update_closure(document, facts)
+    if standard_layout:
+        format_standard_closure(document)
+        document.core_properties.title = output_stem(facts)
+        document.core_properties.subject = "Proposal for Geotechnical Services"
 
     buffer = io.BytesIO()
     document.save(buffer)
@@ -570,10 +731,34 @@ def build_docx(
             header_location,
         )
     )
-    result = patch_package_text(saved_bytes, replacements)
+    result = saved_bytes if standard_layout else patch_package_text(saved_bytes, replacements)
     return ensure_standpipe_scope(
         result, required=bool(facts.borehole_program or facts.borehole_quantity or "drilling" in facts.investigation_methods)
     ), output_stem(facts) + ".docx"
+
+
+def build_standard_docx(
+    facts: ProposalFacts,
+    draft: DraftContent,
+    include_proposed_project_personnel: bool = True,
+) -> tuple[bytes, str]:
+    """Generate every proposal from the same approved layout, independent of retrieval."""
+    if not facts.proposal_number.strip():
+        raise ValueError("Enter the proposal number before generating the Word proposal.")
+    template_path = STANDARD_TEMPLATE_PATH
+    if not template_path.is_file():
+        # Resolve only after encrypted assets have been loaded. Search ranking
+        # cannot change the approved baseline, and customer filenames stay private.
+        candidates = list(HISTORICAL_DIR.glob("P026-121 *.docx"))
+        if not candidates:
+            raise FileNotFoundError("The standard Almor proposal template (P026-121) is missing.")
+        if len(candidates) != 1:
+            raise ValueError("Provide one standard Almor template; multiple P026-121 files were found.")
+        template_path = candidates[0]
+    return build_docx(
+        template_path, facts, draft, include_proposed_project_personnel,
+        standard_layout=True,
+    )
 
 
 def ensure_standpipe_scope(data: bytes, required: bool = False) -> bytes:

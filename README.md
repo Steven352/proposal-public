@@ -25,6 +25,18 @@ Drilling and test pits may be used separately or together; retrieval and draftin
 select drilling-only, test-pit-only, or mixed-investigation references and wording
 without deriving quantities from contractor hours.
 
+Every generated Word proposal uses the same standard Almor layout, based on the
+approved P026-121 document in the encrypted library. Historical matches provide
+writing examples only. They do not select page layout, headers, styles, standard
+sections, or the cost table. The cost table uses one fixed six-column format with
+8-point Arial text, consistent widths and alternating shading. Repeating headers
+are populated directly from the current client, project, location and proposal
+number; first-page company letterhead is retained.
+
+Enter the proposal number once in Step 1. That value is used in the proposal,
+every project header and the download filename. Changing it removes the previous
+download so the document can be regenerated with the new number.
+
 Immediately above **Generate Word proposal**, **Include Proposed Project Personnel
 section** is checked by default. Uncheck it to omit the complete personnel section.
 When the selected layout has no personnel section, the checked option imports that

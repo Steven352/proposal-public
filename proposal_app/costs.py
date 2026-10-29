@@ -98,8 +98,14 @@ def as_number(value: object) -> float | None:
 
 def clean_text(value: object) -> str:
     text = "" if value is None else str(value).strip()
+    # Repair exact catalog labels already expanded by older normalization runs.
+    for label, suffix in (("Hydrometer", "Analysis"), ("Organic Content", "Tests")):
+        if re.fullmatch(rf"{re.escape(label)}(?:\s+{suffix})+", text):
+            text = f"{label} {suffix}"
     for before, after in WORDING_REPLACEMENTS.items():
-        text = text.replace(before, after)
+        # Consume canonical wording first so its shorter alias is not expanded again.
+        pattern = rf"\b(?:{re.escape(after)}|{re.escape(before)})\b"
+        text = re.sub(pattern, after, text)
     if text == "Background":
         return "background review"
     return text
