@@ -26,8 +26,9 @@ select drilling-only, test-pit-only, or mixed-investigation references and wordi
 without deriving quantities from contractor hours.
 
 Every generated Word proposal uses the same standard Almor layout, based on the
-approved P026-121 document in the encrypted library. Historical matches provide
-writing examples only. They do not select page layout, headers, styles, standard
+supplied P026-187 Road Structure Assessment reference and packaged as
+`data/templates/standard_proposal.docx`. Historical matches provide writing
+examples only. They do not select page layout, headers, styles, standard
 sections, or the cost table. The cost table uses one fixed six-column format with
 8-point Arial text, consistent widths and alternating shading. Repeating headers
 are populated directly from the current client, project, location and proposal

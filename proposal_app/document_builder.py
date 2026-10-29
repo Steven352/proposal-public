@@ -121,6 +121,13 @@ def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None
                         offset.text = str(int(offset.text) + int(original_header_distance or 0))
                         position.set("relativeFrom", "page")
                 continue
+            if first_page and "Project Name" in old_text:
+                # The reference letterhead carries an invisible text-box copy
+                # of its old project header. Keep the logo/drawing, but never
+                # let that copy leak into a generated proposal.
+                for text_node in header._element.xpath(".//w:t"):
+                    text_node.text = ""
+                continue
             # Textbox drawing/VML copies can disagree and clip long project names.
             # Native paragraphs give every page the same current facts and wrapping.
             for child in list(header._element):
@@ -308,8 +315,50 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         if paragraph._p is introduction._p:
             break
         preceding.append(paragraph)
-    if len(preceding) < 5:
+    if len(preceding) < 4:
         raise ValueError("Selected proposal does not have a compatible front matter layout.")
+
+    # The P026-187 reference uses the compact ATS letter layout: date/number,
+    # attention, a spacer, then one Re block containing project and location.
+    # Keep that visual structure instead of forcing a client-address block into
+    # the template and changing its page rhythm.
+    attention_index = next(
+        (index for index, paragraph in enumerate(preceding) if "Attention:" in paragraph.text),
+        None,
+    )
+    re_index = next(
+        (index for index, paragraph in enumerate(preceding) if paragraph.text.lstrip().startswith("Re:")),
+        None,
+    )
+    if attention_index is not None and re_index is not None and re_index > attention_index:
+        date_line_nodes = preceding[0]._p.xpath(".//w:t")
+        old_date = preceding[0].text.split("\t", 1)[0].strip()
+        old_number_match = re.search(r"P0\d{2}-[0-9A-Za-z]+", preceding[0].text)
+        old_number = old_number_match.group(0) if old_number_match else "[Proposal Number]"
+        replace_text_across_nodes(date_line_nodes, old_date, format_date(facts.proposal_date))
+        if old_number:
+            replace_text_across_nodes(date_line_nodes, old_number, facts.proposal_number)
+        old_re_lines = preceding[re_index].text.splitlines()
+        old_project = old_re_lines[1].strip() if len(old_re_lines) > 1 else ""
+        old_location = "\n".join(line.strip() for line in old_re_lines[2:] if line.strip())
+        attention = f"Attention: {facts.contact_name}" if facts.contact_name else ""
+        if facts.contact_title and facts.contact_name:
+            attention = f"Attention: {facts.contact_name}, {facts.contact_title}"
+        if facts.contact_email:
+            attention = f"{attention} | {facts.contact_email}" if attention else facts.contact_email
+        set_paragraph_text(preceding[attention_index], attention)
+        locations = [line.strip() for line in facts.project_location.splitlines() if line.strip()]
+        set_paragraph_text(
+            preceding[re_index],
+            "Re:\tRequest for Proposal for Geotechnical Services\n"
+            + "\n".join([facts.project_name, *locations]),
+        )
+        return {
+            "old_number": old_number,
+            "old_client": "",
+            "old_project": old_project,
+            "old_location": old_location,
+        }
 
     old_number_match = re.search(r"P0\d{2}-[0-9A-Za-z]+", preceding[0].text)
     old_number = old_number_match.group(0) if old_number_match else ""
@@ -433,15 +482,21 @@ def update_cost_section(
     if len(paragraphs) < 2:
         raise ValueError("Selected proposal cost section is incompatible.")
     set_paragraph_text(paragraphs[0], clean_cost_intro(draft.cost_intro))
+    total_paragraph = next(
+        (paragraph for paragraph in reversed(paragraphs) if re.search(r"\$[\d,]+\.\d{2}", paragraph.text)),
+        None,
+    )
+    if total_paragraph is None:
+        raise ValueError("Selected proposal fee paragraph has no replaceable total.")
     total_text, replacements = re.subn(
         r"\$[\d,]+\.\d{2}",
         format_money(final_total),
-        paragraphs[-1].text,
+        total_paragraph.text,
         count=1,
     )
     if replacements != 1:
         raise ValueError("Selected proposal fee paragraph has no replaceable total.")
-    set_paragraph_text(paragraphs[-1], total_text)
+    set_paragraph_text(total_paragraph, total_text)
 
 
 def update_closure(document: DocumentType, facts: ProposalFacts) -> None:
