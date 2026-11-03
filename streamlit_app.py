@@ -67,6 +67,13 @@ st.markdown(
     [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
         display: none;
     }
+    [data-testid="stFileUploader"] button[aria-label="Add files"]::before {
+        content: "";
+        width: 0.75rem;
+        height: 0.75rem;
+        background: linear-gradient(currentColor, currentColor) center / 100% 2px no-repeat,
+                    linear-gradient(currentColor, currentColor) center / 2px 100% no-repeat;
+    }
     [data-testid="stExpander"] summary > span::before {
         content: "";
         width: 0.45rem;
