@@ -23,6 +23,7 @@ from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
 
 
+ALMOR_BROWN = "663300"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 STANDPIPE_SCOPE = (
     "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with "
@@ -196,11 +197,11 @@ def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None
                 for run in paragraph.runs:
                     run.font.name = "Arial"
                     run.font.size = Pt(9 if index == 0 else 8)
-                    run.font.color.rgb = RGBColor(102, 51, 0)
+                    run.font.color.rgb = RGBColor.from_string(ALMOR_BROWN)
                     run.bold = index == 0
             border = OxmlElement("w:pBdr")
             bottom = OxmlElement("w:bottom")
-            for key, value in (("val", "single"), ("sz", "6"), ("space", "6"), ("color", "663300")):
+            for key, value in (("val", "single"), ("sz", "6"), ("space", "6"), ("color", ALMOR_BROWN)):
                 bottom.set(qn("w:" + key), value)
             border.append(bottom)
             header.paragraphs[-1]._p.get_or_add_pPr().append(border)
@@ -376,6 +377,18 @@ def replace_section(
         clone_paragraph_before(anchor, prototype, block.text)
 
 
+def set_attention_text(paragraph: Paragraph, attention: str, email: str) -> None:
+    set_paragraph_text(paragraph, f"{attention} | " if attention and email else attention)
+    if email:
+        original_run = paragraph.runs[0]
+        email_run = paragraph.add_run(email)
+        if original_run._r.rPr is not None:
+            email_run._r.insert(0, deepcopy(original_run._r.rPr))
+        email_run.font.color.rgb = RGBColor.from_string(ALMOR_BROWN)
+        if not attention:
+            original_run._r.getparent().remove(original_run._r)
+
+
 def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[str, str]:
     introduction = paragraph_by_text(document, "Introduction")
     preceding = []
@@ -429,9 +442,7 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
             attention = f"Attention: {facts.contact_name}" if facts.contact_name else ""
             if facts.contact_title and facts.contact_name:
                 attention = f"Attention: {facts.contact_name}, {facts.contact_title}"
-            if facts.contact_email:
-                attention = f"{attention} | {facts.contact_email}" if attention else facts.contact_email
-            set_paragraph_text(preceding[attention_index], attention)
+            set_attention_text(preceding[attention_index], attention, facts.contact_email)
             set_paragraph_text(
                 preceding[re_index],
                 "Re:\tRequest for Proposal for Geotechnical Services",
@@ -451,9 +462,7 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         attention = f"Attention: {facts.contact_name}" if facts.contact_name else ""
         if facts.contact_title and facts.contact_name:
             attention = f"Attention: {facts.contact_name}, {facts.contact_title}"
-        if facts.contact_email:
-            attention = f"{attention} | {facts.contact_email}" if attention else facts.contact_email
-        set_paragraph_text(preceding[attention_index], attention)
+        set_attention_text(preceding[attention_index], attention, facts.contact_email)
         locations = [line.strip() for line in facts.project_location.splitlines() if line.strip()]
         set_paragraph_text(
             preceding[re_index],
@@ -496,10 +505,8 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
     if facts.contact_title:
         attention_parts[0] = f"{facts.contact_name}, {facts.contact_title}" if facts.contact_name else facts.contact_title
     attention = f"Attention: {attention_parts[0]}" if attention_parts[0] else ""
-    if facts.contact_email:
-        attention = f"{attention} | {facts.contact_email}" if attention else facts.contact_email
     if len(preceding) > 3:
-        set_paragraph_text(preceding[3], attention)
+        set_attention_text(preceding[3], attention, facts.contact_email)
     set_paragraph_text(
         preceding[4],
         f"Re:\tRequest for Proposal for Geotechnical Services\n{facts.project_name}",

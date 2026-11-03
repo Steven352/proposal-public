@@ -150,6 +150,24 @@ class StandardDocumentTest(unittest.TestCase):
             self.assertNotIn("P026-111", text)
             self.assertNotIn("P026-222", text)
 
+    def test_only_the_attention_email_uses_almor_brown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            source = Document(base)
+            attention = next(p for p in source.paragraphs if p.text.startswith("Attention:"))
+            attention.runs[0].bold = True
+            source.save(base)
+            facts = sample_facts().model_copy(update={
+                "contact_title": "Project Manager", "contact_email": "alex@example.com",
+            })
+            result, _ = self.build(base, facts)
+        attention = next(p for p in result.paragraphs if p.text.startswith("Attention:"))
+        self.assertEqual([r.text for r in attention.runs],
+                         ["Attention: Alex Example, Project Manager | ", "alex@example.com"])
+        self.assertIsNone(attention.runs[0].font.color.rgb)
+        self.assertEqual(str(attention.runs[1].font.color.rgb), "663300")
+        self.assertTrue(all(run.bold for run in attention.runs))
+
     def test_standard_field_program_keeps_fixed_template_wording(self):
         with tempfile.TemporaryDirectory() as directory:
             base, _ = make_standard_templates(directory)
