@@ -62,6 +62,23 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* Keep widget labels readable when the browser cannot load icon fonts. */
+    [data-testid="stFileUploader"] button [data-testid="stIconMaterial"],
+    [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
+        display: none;
+    }
+    [data-testid="stExpander"] summary > span::before {
+        content: "";
+        width: 0.45rem;
+        height: 0.45rem;
+        flex: none;
+        border: solid currentColor;
+        border-width: 0 2px 2px 0;
+        transform: rotate(-45deg);
+    }
+    [data-testid="stExpander"] details[open] > summary > span::before {
+        transform: rotate(45deg);
+    }
     .block-container { max-width: 980px; padding-top: 2rem; padding-bottom: 4rem; }
     .small-note { color: #667085; font-size: 0.9rem; }
     div[data-testid="stDownloadButton"] button { width: 100%; }
