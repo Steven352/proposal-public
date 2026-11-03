@@ -9,7 +9,7 @@ from pathlib import Path
 
 from docx import Document
 from docx.document import Document as DocumentType
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -43,7 +43,6 @@ STANDARD_FIELD_PROGRAM_WORDING = (
 )
 
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
-STANDARD_COST_WIDTHS = (3114, 3580, 528, 510, 1312, 928)
 STANDARD_CLOSING = (
     "Almor is interested in supporting the successful design and construction of the proposed project."
 )
@@ -189,11 +188,20 @@ def apply_standard_cost_table(document: DocumentType, existing: Table) -> Table:
     return table
 
 
-def format_standard_cost_table(table: Table) -> None:
+def format_standard_cost_table(table: Table, document: DocumentType) -> None:
+    section = document.sections[0]
+    total_width = (section.page_width - section.left_margin - section.right_margin
+                   - Inches(0.2)) // 635
+    widths = [round(total_width * proportion) for proportion in (0.30, 0.33, 0.06, 0.06, 0.13)]
+    widths.append(total_width - sum(widths))
     table.autofit = False
-    for column, width in zip(table.columns, STANDARD_COST_WIDTHS, strict=True):
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for column, width in zip(table.columns, widths, strict=True):
         column.width = Twips(width)
     properties = table._tbl.tblPr
+    table_width = properties.find(qn("w:tblW"))
+    table_width.set(qn("w:type"), "dxa")
+    table_width.set(qn("w:w"), str(total_width))
     borders = OxmlElement("w:tblBorders")
     for side in ("top", "left", "bottom", "right", "insideH", "insideV"):
         border = OxmlElement("w:" + side)
@@ -208,8 +216,9 @@ def format_standard_cost_table(table: Table) -> None:
             row_properties.append(OxmlElement("w:tblHeader"))
         section_row = bool(row.cells[0].text) and all(not cell.text for cell in row.cells[1:])
         total_row = row.cells[4].text in ("Subtotal", "Estimated Cost")
-        fill = "D6DBD9" if index == 0 or index % 2 else "FFFFFF"
-        for column_index, (cell, width) in enumerate(zip(row.cells, STANDARD_COST_WIDTHS, strict=True)):
+        heading_row = index == 0 or section_row
+        fill = "603B17" if heading_row else "FFFFFF"
+        for column_index, (cell, width) in enumerate(zip(row.cells, widths, strict=True)):
             cell.width = Twips(width)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             cell_properties = cell._tc.get_or_add_tcPr()
@@ -240,8 +249,8 @@ def format_standard_cost_table(table: Table) -> None:
                 for run in paragraph.runs:
                     run.font.name = "Arial"
                     run.font.size = Pt(8)
-                    run.font.color.rgb = RGBColor(0, 0, 0)
-                    run.bold = index == 0 or section_row or (total_row and column_index >= 4)
+                    run.font.color.rgb = RGBColor.from_string("FFFFFF" if heading_row else "000000")
+                    run.bold = heading_row or (total_row and column_index >= 4)
 
 
 def format_standard_closure(document: DocumentType) -> None:
@@ -833,7 +842,9 @@ def build_docx(
         cost_table = apply_standard_cost_table(document, cost_table)
     final_total = update_cost_table(cost_table, facts)
     if standard_layout:
-        format_standard_cost_table(cost_table)
+        format_standard_cost_table(cost_table, document)
+        for heading in ("Cost of Geotechnical Services", "Terms and Conditions"):
+            paragraph_by_text(document, heading).paragraph_format.page_break_before = True
     update_cost_section(document, draft, facts, final_total)
 
     if not paragraphs_between(document, "Terms and Conditions", "Closure"):

@@ -226,7 +226,7 @@ class StandardDocumentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base, costs = make_standard_templates(directory)
             costs.unlink()  # An encrypted deployment need not have a separate cost-template DOCX.
-            expected_widths = [Twips(value) for value in (3114, 3580, 528, 510, 1312, 928)]
+            expected_widths = [Twips(value) for value in (2506, 2756, 501, 501, 1086, 1002)]
             for project in ("Current Example Development", "A different project with different scope"):
                 with self.subTest(project=project):
                     facts = sample_facts().model_copy(update={"project_name": project})
@@ -271,7 +271,7 @@ class StandardDocumentTest(unittest.TestCase):
         self.assertFalse(any("|" in paragraph for paragraph in paragraphs))
         self.assertIn("The following estimate applies to this scope.", paragraphs)
 
-    def test_cost_item_rows_use_alternating_standard_shading(self):
+    def test_cost_headings_are_brown_and_item_rows_are_white(self):
         facts = sample_facts()
         facts.cost_items.append(CostLineItem(
             section="Field Program", item="Field supplies", description="Consumables",
@@ -283,8 +283,15 @@ class StandardDocumentTest(unittest.TestCase):
         rows = result.tables[0].rows
         fills = [row.cells[0]._tc.xpath("./w:tcPr/w:shd/@w:fill") for row in rows[2:4]]
         self.assertEqual(len(fills), 2)
-        self.assertNotEqual(fills[0], fills[1])
-        self.assertIn(["D6DBD9"], fills)
+        self.assertEqual(fills, [["FFFFFF"], ["FFFFFF"]])
+        for row in rows[:2]:
+            for cell in row.cells:
+                self.assertEqual(cell._tc.xpath("./w:tcPr/w:shd/@w:fill"), ["603B17"])
+                for run in cell.paragraphs[0].runs:
+                    self.assertEqual(str(run.font.color.rgb), "FFFFFF")
+        for heading in ("Cost of Geotechnical Services", "Terms and Conditions"):
+            paragraph = next(p for p in result.paragraphs if p.text == heading)
+            self.assertTrue(paragraph.paragraph_format.page_break_before)
 
     def test_signature_group_stays_together_with_standard_font_sizes(self):
         with tempfile.TemporaryDirectory() as directory:
