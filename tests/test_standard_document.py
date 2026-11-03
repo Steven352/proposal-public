@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import parse_xml
 from docx.shared import Inches, Pt, Twips
 
@@ -237,13 +239,17 @@ class StandardDocumentTest(unittest.TestCase):
                     item_paragraph = result.tables[0].rows[2].cells[0].paragraphs[0]
                     self.assertEqual(item_paragraph.runs[0].font.size, Pt(8))
                     self.assertEqual(item_paragraph.runs[0].font.name, "Arial")
-                    self.assertEqual(item_paragraph.paragraph_format.space_after, Pt(8))
+                    self.assertEqual(item_paragraph.paragraph_format.space_after, Pt(0))
                     self.assertAlmostEqual(item_paragraph.paragraph_format.line_spacing, 1.07917, places=4)
                     self.assertFalse(result.tables[0].autofit)
                     self.assertFalse(result.tables[0]._tbl.xpath(".//w:gridSpan|.//w:vMerge"))
                     self.assertTrue(result.tables[0].rows[0]._tr.xpath("./w:trPr/w:tblHeader"))
                     for row in result.tables[0].rows:
                         self.assertTrue(row._tr.xpath("./w:trPr/w:cantSplit"))
+                        for cell in row.cells:
+                            self.assertEqual(cell.vertical_alignment, WD_CELL_VERTICAL_ALIGNMENT.CENTER)
+                            for paragraph in cell.paragraphs:
+                                self.assertEqual(paragraph.alignment, WD_ALIGN_PARAGRAPH.CENTER)
                     text = "\n".join(paragraph.text for paragraph in result.paragraphs)
                     self.assertIn("Approved standard terms.", text)
                     self.assertIn(
@@ -255,7 +261,14 @@ class StandardDocumentTest(unittest.TestCase):
                     self.assertNotIn("AI text must not replace", text)
                     table_text = "\n".join(cell.text for row in result.tables[0].rows for cell in row.cells)
                     self.assertIn("$450.00", table_text)
-                    self.assertIn("The total estimated services cost is $450.00, excluding GST.", text)
+                    self.assertIn(
+                        "The total estimated geotechnical engineering project services cost for this work is $450.00. "
+                        "The estimated cost includes all professional service fees, surcharges, associated fees and is valid "
+                        "for a period of 60 days from the date on the proposal. The estimated cost is based on the scope of "
+                        "work and assumptions described in this document and is exclusive of GST and any other applicable "
+                        "taxes. Invoices would be forwarded to the client monthly.",
+                        text,
+                    )
 
     def test_ai_markdown_cost_table_cannot_create_a_second_cost_table(self):
         draft = sample_draft().model_copy(update={"cost_intro": (
@@ -269,7 +282,14 @@ class StandardDocumentTest(unittest.TestCase):
         paragraphs = [paragraph.text for paragraph in result.paragraphs]
         self.assertEqual(len(result.tables), 1)
         self.assertFalse(any("|" in paragraph for paragraph in paragraphs))
-        self.assertIn("The following estimate applies to this scope.", paragraphs)
+        intro = (
+            "Based on the information provided by the Client, Almor provides the following estimated cost "
+            "to complete the proposed geotechnical scope of work."
+        )
+        self.assertIn(intro, paragraphs)
+        self.assertNotIn("The following estimate applies to this scope.", paragraphs)
+        table = result.tables[0]._tbl
+        self.assertEqual(table.getprevious().xpath(".//w:t/text()"), [intro])
 
     def test_cost_headings_are_brown_and_item_rows_are_white(self):
         facts = sample_facts()

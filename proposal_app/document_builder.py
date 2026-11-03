@@ -43,6 +43,17 @@ STANDARD_FIELD_PROGRAM_WORDING = (
 )
 
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+STANDARD_COST_INTRO = (
+    "Based on the information provided by the Client, Almor provides the following estimated cost "
+    "to complete the proposed geotechnical scope of work."
+)
+STANDARD_COST_SUMMARY = (
+    "The total estimated geotechnical engineering project services cost for this work is {total}. "
+    "The estimated cost includes all professional service fees, surcharges, associated fees and is "
+    "valid for a period of 60 days from the date on the proposal. The estimated cost is based on the "
+    "scope of work and assumptions described in this document and is exclusive of GST and any other "
+    "applicable taxes. Invoices would be forwarded to the client monthly."
+)
 STANDARD_CLOSING = (
     "Almor is interested in supporting the successful design and construction of the proposed project."
 )
@@ -228,7 +239,7 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
             margins = OxmlElement("w:tcMar")
             for side in ("top", "left", "bottom", "right"):
                 margin = OxmlElement("w:" + side)
-                margin.set(qn("w:w"), "50" if side in ("left", "right") else "0")
+                margin.set(qn("w:w"), "50" if side in ("left", "right") else "60")
                 margin.set(qn("w:type"), "dxa")
                 margins.append(margin)
             cell_properties.append(margins)
@@ -236,14 +247,10 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
                 cell_properties.append(OxmlElement("w:noWrap"))
             for paragraph in cell.paragraphs:
                 paragraph.style = "Normal"
-                paragraph.alignment = (
-                    WD_ALIGN_PARAGRAPH.RIGHT if column_index >= 4 else
-                    WD_ALIGN_PARAGRAPH.CENTER if column_index in (2, 3) else
-                    WD_ALIGN_PARAGRAPH.LEFT
-                )
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 fmt = paragraph.paragraph_format
                 fmt.space_before = Pt(0)
-                fmt.space_after = Pt(8)
+                fmt.space_after = Pt(0)
                 fmt.line_spacing = 1.07917
                 fmt.keep_with_next = index == 0 or section_row
                 for run in paragraph.runs:
@@ -552,8 +559,9 @@ def set_row_values(row: _Row, values: list[str]) -> None:
 def update_cost_section(
     document: DocumentType,
     draft: DraftContent,
-    facts: ProposalFacts,
     final_total: float,
+    *,
+    standard_layout: bool,
 ) -> None:
     blocks = list(document.element.body.iterchildren())
     cost_heading = paragraph_by_text(document, "Cost of Geotechnical Services")._p
@@ -564,6 +572,10 @@ def update_cost_section(
     paragraphs = [Paragraph(node, document) for node in between if node.tag.endswith("}p")]
     if len(paragraphs) < 2:
         raise ValueError("Selected proposal cost section is incompatible.")
+    if standard_layout:
+        set_paragraph_text(paragraphs[0], STANDARD_COST_INTRO)
+        set_paragraph_text(paragraphs[-1], STANDARD_COST_SUMMARY.format(total=format_money(final_total)))
+        return
     set_paragraph_text(paragraphs[0], clean_cost_intro(draft.cost_intro))
     total_paragraph = next(
         (paragraph for paragraph in reversed(paragraphs) if re.search(r"\$[\d,]+\.\d{2}", paragraph.text)),
@@ -845,7 +857,7 @@ def build_docx(
         format_standard_cost_table(cost_table, document)
         for heading in ("Cost of Geotechnical Services", "Terms and Conditions"):
             paragraph_by_text(document, heading).paragraph_format.page_break_before = True
-    update_cost_section(document, draft, facts, final_total)
+    update_cost_section(document, draft, final_total, standard_layout=standard_layout)
 
     if not paragraphs_between(document, "Terms and Conditions", "Closure"):
         raise ValueError("Selected proposal terms section is incompatible.")
