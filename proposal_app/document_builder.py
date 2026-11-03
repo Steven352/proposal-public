@@ -54,8 +54,24 @@ STANDARD_COST_SUMMARY = (
     "scope of work and assumptions described in this document and is exclusive of GST and any other "
     "applicable taxes. Invoices would be forwarded to the client monthly."
 )
-STANDARD_CLOSING = (
-    "Almor is interested in supporting the successful design and construction of the proposed project."
+STANDARD_TERMS = (
+    "Attached to this proposal is Almor’s Standard Terms and Conditions including a Work "
+    "Authorization form. Acceptance of this proposal constitutes an acceptance of Almor’s Standard "
+    "Terms and Conditions. Please initial the attached Standard Terms and Conditions document and "
+    "complete the Work Authorization form. We require both documents completed prior to project "
+    "initiation. Almor will not exceed the estimated cost without prior client approval."
+)
+STANDARD_CLOSURE = (
+    (
+        "Almor is very interested in being part of the design team for this project. We feel that our "
+        "experience and strong geotechnical and materials engineering background will be an asset to the"
+        " successful design and construction of the proposed development."
+    ),
+    (
+        "Thank you for the opportunity; we trust this proposal meets your needs. If you have any "
+        "questions or wish to discuss this proposal further, please contact the undersigned. We look "
+        "forward to working with you."
+    ),
 )
 
 
@@ -262,7 +278,8 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
 
 def format_standard_closure(document: DocumentType) -> None:
     paragraphs = paragraphs_between(document, "Closure", None)
-    set_paragraph_text(paragraphs[0], STANDARD_CLOSING)
+    for paragraph, text in zip(paragraphs[:2], STANDARD_CLOSURE, strict=True):
+        set_paragraph_text(paragraph, text)
     paragraph_by_text(document, "Closure").paragraph_format.keep_with_next = True
     for paragraph in paragraphs:
         paragraph.paragraph_format.keep_with_next = True
@@ -863,6 +880,10 @@ def build_docx(
         raise ValueError("Selected proposal terms section is incompatible.")
     update_closure(document, facts)
     if standard_layout:
+        replace_section(
+            document, "Terms and Conditions", "Closure",
+            [ParagraphBlock(text=STANDARD_TERMS, style="body")],
+        )
         identifier = next(p for p in reversed(document.paragraphs) if p.text.strip())
         set_paragraph_text(identifier, display_title(identifier.text))
         format_standard_closure(document)

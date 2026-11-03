@@ -185,7 +185,7 @@ class StandardDocumentTest(unittest.TestCase):
                  patch.object(document_builder, "HISTORICAL_DIR", library):
                 data, _ = document_builder.build_standard_docx(sample_facts(), sample_draft())
             text = "\n".join(p.text for p in Document(io.BytesIO(data)).paragraphs)
-            self.assertIn("Approved standard terms.", text)
+            self.assertIn("Attached to this proposal is Almor’s Standard Terms and Conditions", text)
             self.assertNotIn("Unwanted historical terms.", text)
 
     def test_ambiguous_fixed_reference_requires_one_standard_template(self):
@@ -251,12 +251,6 @@ class StandardDocumentTest(unittest.TestCase):
                             for paragraph in cell.paragraphs:
                                 self.assertEqual(paragraph.alignment, WD_ALIGN_PARAGRAPH.CENTER)
                     text = "\n".join(paragraph.text for paragraph in result.paragraphs)
-                    self.assertIn("Approved standard terms.", text)
-                    self.assertIn(
-                        "Almor is interested in supporting the successful design and construction "
-                        "of the proposed project.",
-                        text,
-                    )
                     self.assertNotIn("Approved closure one.", text)
                     self.assertNotIn("AI text must not replace", text)
                     table_text = "\n".join(cell.text for row in result.tables[0].rows for cell in row.cells)
@@ -269,6 +263,30 @@ class StandardDocumentTest(unittest.TestCase):
                         "taxes. Invoices would be forwarded to the client monthly.",
                         text,
                     )
+
+    def test_standard_terms_and_closure_use_the_approved_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            result, _ = self.build(base)
+        paragraphs = [p.text for p in result.paragraphs]
+        terms = paragraphs.index("Terms and Conditions")
+        closure = paragraphs.index("Closure")
+        self.assertEqual(paragraphs[terms + 1:closure], [
+            'Attached to this proposal is Almor’s Standard Terms and Conditions including a Work '
+            'Authorization form. Acceptance of this proposal constitutes an acceptance of Almor’s Standard '
+            'Terms and Conditions. Please initial the attached Standard Terms and Conditions document and '
+            'complete the Work Authorization form. We require both documents completed prior to project '
+            'initiation. Almor will not exceed the estimated cost without prior client approval.',
+        ])
+        self.assertEqual(paragraphs[closure + 1:closure + 4], [
+            'Almor is very interested in being part of the design team for this project. We feel that our '
+            'experience and strong geotechnical and materials engineering background will be an asset to '
+            'the successful design and construction of the proposed development.',
+            'Thank you for the opportunity; we trust this proposal meets your needs. If you have any '
+            'questions or wish to discuss this proposal further, please contact the undersigned. We look '
+            'forward to working with you.',
+            'Respectfully Submitted,',
+        ])
 
     def test_ai_markdown_cost_table_cannot_create_a_second_cost_table(self):
         draft = sample_draft().model_copy(update={"cost_intro": (
