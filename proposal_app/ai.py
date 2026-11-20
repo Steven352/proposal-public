@@ -48,20 +48,21 @@ user-approved text has priority except where an explicitly required factual corr
 
 Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
 borehole/test-pit quantities or depths from hours. In the Scope of Work, do not name actual laboratory
-tests. Use exactly: "Collection of suitable soil samples for laboratory testing. Laboratory testing on
-selected samples to assist with the determination of engineering properties. The actual tests conducted
-will be a function of the soil conditions encountered." Treat borehole_program and test_pit_program as
+tests. The Word assembler supplies the approved laboratory-testing and geotechnical-report bullets
+when applicable. Treat borehole_program and test_pit_program as
 authoritative over the legacy single-value fields. Preserve every quantity/depth group in the
 field-program wording.
 
 For boreholes, use the drilling module: track-mounted solid-stem auger wording, SPT at 1.5 m intervals
-where conditions permit, pocket penetrometer testing, sampling, logging, GPS, and drill-cuttings care.
+where conditions permit, pocket penetrometer testing, sampling, and logging.
 Every proposal with boreholes must include this standard scope, even when groundwater monitoring
 is not selected in investigation_methods or priced separately. This user-approved requirement takes
-precedence over scope-module filtering and historical rules. Use exactly: "Installation of 25 mm
+precedence over scope-module filtering and historical rules. The Word assembler supplies: "Installation of 25 mm
 diameter standpipe piezometers in all boreholes, backfilled with cuttings and capped with bentonite.
 Groundwater readings will be taken at the end of drilling and during one follow-up visit two weeks after
-the field program."
+the field program." It also supplies the borehole GPS bullet and the closing field oversight,
+laboratory handling, environmental stewardship, and drill cuttings paragraph. Leave those fixed
+paragraphs out of the draft. Include separately scoped details in their own paragraphs.
 For test pits, use a distinct test-pit module: suitable excavator, excavation/logging, pocket
 penetrometer testing where possible, disturbed sampling, groundwater observations during excavation,
 GPS, and backfilling with excavated material. Do not use drilling, SPT, piezometer, or drill-cuttings

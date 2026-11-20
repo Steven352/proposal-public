@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
+from proposal_app.access import ACCESS_SESSION_VERSION
+
 
 class PersonnelOptionTest(unittest.TestCase):
     def setUp(self):
@@ -22,6 +24,7 @@ class PersonnelOptionTest(unittest.TestCase):
         )
         app.session_state["access_granted"] = True
         app.session_state["access_role"] = "standard"
+        app.session_state["access_session_version"] = ACCESS_SESSION_VERSION
         app.run()
         next(button for button in app.button if button.label == "Enter manually").click().run()
         self.assertFalse(app.exception)

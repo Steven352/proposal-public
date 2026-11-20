@@ -7,7 +7,7 @@ from .uploaded_proposal import client_email_from_proposal
 
 def generate_complete_package(
     word: bytes, filename: str, facts: ProposalFacts, scope: str, budget: float,
-    add_signatures: bool, library: GitHubLibrary | None,
+    add_signatures: bool, library: GitHubLibrary | None, *, archive_source: bool = True,
 ) -> dict:
     prepared = ensure_standpipe_scope(word)
     pdf, name = build_complete_pdf_package(prepared, facts, scope, budget, add_signatures=add_signatures)
@@ -17,6 +17,9 @@ def generate_complete_package(
         'signed': add_signatures, 'email_subject': subject, 'email_body': body,
         'library_error': '', 'library_path': '',
     }
+    if not archive_source:
+        return result
+
     try:
         if library is None:
             raise RuntimeError('Private library storage is not configured. Set GITHUB_LIBRARY_TOKEN and GITHUB_LIBRARY_REPO in Streamlit Secrets.')

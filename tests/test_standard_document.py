@@ -15,6 +15,28 @@ from proposal_app import document_builder
 from proposal_app.models import CostLineItem, DraftContent, ParagraphBlock, ProposalFacts
 
 
+FIXED_SCOPE = (
+    "Collection of suitable soil samples for laboratory testing. Laboratory testing on selected "
+    "samples to assist with the determination of engineering properties. The actual tests conducted "
+    "will be a function of the soil conditions encountered.",
+    "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with cuttings "
+    "and capped with bentonite. Groundwater readings will be taken at the end of drilling and during "
+    "one follow-up visit two weeks after the field program.",
+    "Each of the completed boreholes shall be surveyed in the field using a medium precision handheld "
+    "GPS (+/- 10 m) to obtain UTM northing, eastings and approximate elevations. If precision "
+    "surveying is required, this work will be provided by others and is outside the scope of our proposal.",
+    "Preparation of a geotechnical report describing the work performed, presenting the findings, and "
+    "providing geotechnical recommendations to support the proposed development.",
+    " All work will be overseen by qualified and experienced Almor field staff who will log the soil "
+    "and groundwater conditions encountered during the drilling program and collect suitable soil "
+    "samples. Following the field work, the samples will be returned to our office for review, and "
+    "submission to Almor’s laboratory for standard index testing. Almor understands the importance of "
+    "environmental stewardship at the site locations and shall minimize the impact from drilling. We "
+    "have assumed that all drill cuttings can be returned to the boreholes or scattered around the "
+    "boreholes at surface.",
+)
+
+
 def sample_facts():
     return ProposalFacts(
         proposal_number="P026-999", proposal_date="2026-10-29",
@@ -102,6 +124,7 @@ def make_standard_templates(directory):
     document.add_heading("Scope of Work", 2)
     document.add_heading("Geotechnical Field Program", 3)
     document.add_paragraph("Prior field program.", "Body")
+    document.add_paragraph("Prior scope bullet.", "List Bullet")
     document.add_heading("Cost of Geotechnical Services", 3)
     document.add_paragraph("Approved cost lead-in.", "Body")
     _table(document, False)
@@ -131,6 +154,47 @@ class StandardDocumentTest(unittest.TestCase):
         with patch.object(document_builder, "STANDARD_TEMPLATE_PATH", base, create=True):
             data, filename = build(facts or sample_facts(), draft or sample_draft())
         return Document(io.BytesIO(data)), filename
+
+    def test_first_date_and_proposal_number_row_has_a_single_blank_line_above(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            result, _ = self.build(base)
+        self.assertEqual(result.paragraphs[0].text, "\nOctober 29, 2026\tAlmor Proposal No.: P026-999")
+        shipped_template = Document(document_builder.STANDARD_TEMPLATE_PATH)
+        self.assertEqual(shipped_template.paragraphs[0].text.count("\n"), 1)
+        self.assertTrue(shipped_template.paragraphs[0].text.startswith("\n"))
+
+    def test_fixed_borehole_scope_uses_the_approved_copy_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            facts = sample_facts().model_copy(update={"investigation_methods": ["drilling", "test pits"]})
+            draft = sample_draft().model_copy(update={"field_program_paragraphs": [
+                ParagraphBlock(text="Drill three boreholes to 6 m.", style="list"),
+                ParagraphBlock(text="Installation of standpipe piezometers in selected boreholes.", style="list"),
+                ParagraphBlock(text="Preparation of a summary engineering report.", style="list"),
+            ]})
+            result, _ = self.build(base, facts, draft)
+        scope = document_builder.paragraphs_between(
+            result, "Geotechnical Field Program", "Cost of Geotechnical Services",
+        )
+        self.assertEqual([p.text for p in scope[1:]], ["Drill three boreholes to 6 m.", *FIXED_SCOPE])
+        self.assertEqual([p.style.name for p in scope[-5:]], ["List Bullet"] * 4 + ["Body"])
+        shipped_text = [p.text for p in Document(document_builder.STANDARD_TEMPLATE_PATH).paragraphs]
+        self.assertTrue(all(shipped_text.count(text) == 1 for text in FIXED_SCOPE))
+
+    def test_test_pit_scope_uses_only_applicable_fixed_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            facts = sample_facts().model_copy(update={
+                "laboratory_tests": ["Moisture content"],
+                "reporting_requirements": ["Geotechnical report"],
+            })
+            result, _ = self.build(base, facts)
+        scope = document_builder.paragraphs_between(
+            result, "Geotechnical Field Program", "Cost of Geotechnical Services",
+        )
+        self.assertEqual([p.text for p in scope[1:]], ["Excavate three test pits.", FIXED_SCOPE[0], FIXED_SCOPE[3]])
+        self.assertNotIn("borehole", scope[0].text.lower())
 
     def test_all_project_headers_use_current_facts_despite_historical_header_aliases(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -174,7 +238,8 @@ class StandardDocumentTest(unittest.TestCase):
             draft = sample_draft().model_copy(update={
                 "field_program_intro": "AI must not replace the fixed field-program wording.",
             })
-            result, _ = self.build(base, draft=draft)
+            facts = sample_facts().model_copy(update={"investigation_methods": ["drilling"]})
+            result, _ = self.build(base, facts, draft)
         text = "\n".join(p.text for p in result.paragraphs)
         fixed = (
             "Based on information supplied by the Client, Almor provides the following estimated cost "

@@ -25,10 +25,33 @@ from .models import DraftContent, ParagraphBlock, ProposalFacts
 
 ALMOR_BROWN = "663300"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+LABORATORY_SCOPE = (
+    "Collection of suitable soil samples for laboratory testing. Laboratory testing on selected "
+    "samples to assist with the determination of engineering properties. The actual tests conducted "
+    "will be a function of the soil conditions encountered."
+)
 STANDPIPE_SCOPE = (
     "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with "
     "cuttings and capped with bentonite. Groundwater readings will be taken at the end of "
     "drilling and during one follow-up visit two weeks after the field program."
+)
+BOREHOLE_GPS_SCOPE = (
+    "Each of the completed boreholes shall be surveyed in the field using a medium precision handheld "
+    "GPS (+/- 10 m) to obtain UTM northing, eastings and approximate elevations. If precision "
+    "surveying is required, this work will be provided by others and is outside the scope of our proposal."
+)
+REPORT_SCOPE = (
+    "Preparation of a geotechnical report describing the work performed, presenting the findings, and "
+    "providing geotechnical recommendations to support the proposed development."
+)
+BOREHOLE_SCOPE_CLOSING = (
+    " All work will be overseen by qualified and experienced Almor field staff who will log the soil "
+    "and groundwater conditions encountered during the drilling program and collect suitable soil "
+    "samples. Following the field work, the samples will be returned to our office for review, and "
+    "submission to Almor’s laboratory for standard index testing. Almor understands the importance of "
+    "environmental stewardship at the site locations and shall minimize the impact from drilling. We "
+    "have assumed that all drill cuttings can be returned to the boreholes or scattered around the "
+    "boreholes at surface."
 )
 STANDARD_FIELD_PROGRAM_WORDING = (
     "Based on information supplied by the Client, Almor provides the following estimated cost "
@@ -365,7 +388,7 @@ def replace_section(
         (
             p
             for p in existing
-            if p._p.pPr is not None and p._p.pPr.numPr is not None
+            if (p._p.pPr is not None and p._p.pPr.numPr is not None) or p.style.name.startswith("List Bullet")
         ),
         body_prototype,
     )
@@ -389,6 +412,14 @@ def set_attention_text(paragraph: Paragraph, attention: str, email: str) -> None
             original_run._r.getparent().remove(original_run._r)
 
 
+def ensure_date_row_spacing(paragraph: Paragraph) -> None:
+    if paragraph.runs and not paragraph.text.startswith("\n"):
+        first_run = paragraph.runs[0]
+        blank_line = paragraph.add_run()
+        blank_line.add_break()
+        first_run._r.addprevious(blank_line._r)
+
+
 def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[str, str]:
     introduction = paragraph_by_text(document, "Introduction")
     preceding = []
@@ -398,6 +429,7 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
         preceding.append(paragraph)
     if len(preceding) < 4:
         raise ValueError("Selected proposal does not have a compatible front matter layout.")
+    ensure_date_row_spacing(preceding[0])
 
     # The P026-187 reference uses the compact ATS letter layout: date/number,
     # attention, a spacer, then one Re block containing project and location.
@@ -831,6 +863,36 @@ def configure_personnel_section(
     )
 
 
+def standard_field_program_blocks(
+    facts: ProposalFacts, draft: DraftContent, has_boreholes: bool,
+) -> list[ParagraphBlock]:
+    priced_sections = {item.section for item in normalize_cost_items(facts.cost_items).items if (item.estimate or 0) > 0}
+    fixed_bullets: list[tuple[str, str]] = []
+    if has_boreholes or facts.laboratory_tests or SECTION_ORDER[2] in priced_sections:
+        fixed_bullets.append((LABORATORY_SCOPE, r"(?:collection of suitable soil samples.*laboratory|laboratory testing on selected samples)"))
+    if has_boreholes:
+        fixed_bullets.extend([
+            (STANDPIPE_SCOPE, r"(?:install(?:ation of)?.*piezometers?|groundwater readings)"),
+            (BOREHOLE_GPS_SCOPE, r"each (?:of the )?(?:completed )?boreholes?.*(?:survey|gps)"),
+        ])
+    if has_boreholes or facts.reporting_requirements or SECTION_ORDER[3] in priced_sections:
+        fixed_bullets.append((REPORT_SCOPE, r"preparation of (?:an? )?(?:summary |brief |final )?(?:geotechnical |engineering )+report"))
+
+    owned_texts = [pattern for _, pattern in fixed_bullets]
+    if has_boreholes:
+        owned_texts.append(r"(?:all work will be overseen.*almor field staff|almor understands the importance of environmental stewardship|(?:we have assumed that )?(?:all )?drill cuttings)")
+    intro = STANDARD_FIELD_PROGRAM_WORDING if has_boreholes else draft.field_program_intro
+    blocks = [ParagraphBlock(text=intro, style="body")]
+    for block in draft.field_program_paragraphs:
+        text = " ".join(block.text.split())
+        if not any(re.match(pattern, text, re.IGNORECASE) for pattern in owned_texts):
+            blocks.append(block)
+    blocks.extend(ParagraphBlock(text=text, style="list") for text, _ in fixed_bullets)
+    if has_boreholes:
+        blocks.append(ParagraphBlock(text=BOREHOLE_SCOPE_CLOSING, style="body"))
+    return blocks
+
+
 def build_docx(
     template_path: Path,
     facts: ProposalFacts,
@@ -857,13 +919,14 @@ def build_docx(
         [ParagraphBlock(text=draft.introduction, style="body")],
     )
 
+    has_boreholes = bool(
+        facts.borehole_program or facts.borehole_quantity
+        or any(method.strip().casefold() == "drilling" for method in facts.investigation_methods)
+    )
     if standard_layout:
-        # This paragraph is template-controlled and must remain verbatim;
-        # generated project-specific bullets follow it without rewriting it.
-        field_blocks = [ParagraphBlock(text=STANDARD_FIELD_PROGRAM_WORDING, style="body")]
+        field_blocks = standard_field_program_blocks(facts, draft, has_boreholes)
     else:
-        field_blocks = [ParagraphBlock(text=draft.field_program_intro, style="body")]
-    field_blocks.extend(draft.field_program_paragraphs)
+        field_blocks = [ParagraphBlock(text=draft.field_program_intro, style="body"), *draft.field_program_paragraphs]
     replace_section(
         document,
         "Geotechnical Field Program",
@@ -923,10 +986,10 @@ def build_docx(
             header_location,
         )
     )
-    result = saved_bytes if standard_layout else patch_package_text(saved_bytes, replacements)
-    return ensure_standpipe_scope(
-        result, required=bool(facts.borehole_program or facts.borehole_quantity or "drilling" in facts.investigation_methods)
-    ), output_stem(facts) + ".docx"
+    result = saved_bytes if standard_layout else ensure_standpipe_scope(
+        patch_package_text(saved_bytes, replacements), required=has_boreholes,
+    )
+    return result, output_stem(facts) + ".docx"
 
 
 def build_standard_docx(

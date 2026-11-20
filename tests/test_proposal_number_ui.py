@@ -9,6 +9,7 @@ from streamlit.testing.v1 import AppTest
 from docx import Document
 
 from proposal_app import document_builder
+from proposal_app.access import ACCESS_SESSION_VERSION
 from proposal_app.models import ProposalFacts, ReferenceMatch
 from test_standard_document import make_standard_templates, sample_draft
 
@@ -32,6 +33,7 @@ class ProposalNumberUITest(unittest.TestCase):
         app.secrets["GITHUB_LIBRARY_TOKEN"] = ""
         app.session_state["access_granted"] = True
         app.session_state["access_role"] = "standard"
+        app.session_state["access_session_version"] = ACCESS_SESSION_VERSION
         for key, value in (legacy_state or {}).items():
             app.session_state[key] = value
         app.run()

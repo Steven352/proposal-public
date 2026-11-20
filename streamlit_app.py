@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from proposal_app.ai import ProposalAI
-from proposal_app.access import access_role
+from proposal_app.access import ACCESS_SESSION_VERSION, access_role
 from proposal_app.complete_package import generate_complete_package
 from proposal_app.config import (
     DEFAULT_DRAFT_MODEL,
@@ -102,24 +102,33 @@ def secret(name: str, default: str = "") -> str:
         return os.environ.get(name, default)
 
 
+def clear_access_session() -> None:
+    keys = {"access_granted", "access_role", "access_session_version", "library_state"}
+    prefixes = ("complete_pdf_", "complete_email_", "library_draft_", "library_final_", "approve_rule_")
+    for key in list(st.session_state):
+        if key in keys or key.startswith(prefixes):
+            del st.session_state[key]
+
+
 def require_public_access_code() -> None:
     if not is_public_deployment():
         return
-    configured_code = secret("APP_ACCESS_CODE")
-    if (st.session_state.get("access_granted")
-            and st.session_state.get("access_role") in {"standard", "signer"}):
+    if (
+        st.session_state.get("access_granted")
+        and st.session_state.get("access_role") in {"standard", "signer"}
+        and st.session_state.get("access_session_version") == ACCESS_SESSION_VERSION
+    ):
         return
-    # Existing sessions predate signing roles and must authenticate again.
-    for key in ("access_granted", "access_role", "complete_pdf_output", "complete_pdf_signatures"):
-        st.session_state.pop(key, None)
+    clear_access_session()
 
     st.title("Almor Proposal Builder")
     entered_code = st.text_input("Access code", type="password")
     if st.button("Open Proposal Builder", type="primary", width="stretch"):
-        role = access_role(entered_code, configured_code)
+        role = access_role(entered_code, secret("APP_ACCESS_CODE"))
         if role:
             st.session_state.access_granted = True
             st.session_state.access_role = role
+            st.session_state.access_session_version = ACCESS_SESSION_VERSION
             st.rerun()
         else:
             st.error("Incorrect access code.")
@@ -394,18 +403,20 @@ def initialize_editor(facts: ProposalFacts) -> None:
 st.title("Almor Proposal Builder")
 st.caption("Geotechnical proposals assembled from your request and the closest historical ATS/Almor examples.")
 if st.button("Switch access code"):
-    for key in ("access_granted", "access_role", "complete_pdf_output", "complete_pdf_signatures"):
-        st.session_state.pop(key, None)
+    clear_access_session()
     st.rerun()
 
 
 with st.expander("How it works", expanded=False):
-    st.write(
-        "Paste or upload the request, verify the extracted project and cost information, then generate "
-        "a Word proposal for review. In Step 4, upload the reviewed Word proposal to generate the "
-        "complete PDF and client email draft. Uploaded "
-        "request files are processed for the current session. Only a reviewed Final Proposal that you "
-        "explicitly confirm is saved to the private proposal library."
+    st.markdown(
+        "1. **Add the request.** Enter the proposal number and upload the downloaded client email "
+        "(.eml) or other supporting files. You can also paste the email. Select **Analyze request**.\n"
+        "2. **Verify Proposal Information.** Review and edit the project details and investigation "
+        "scope, then edit the **Cost table**.\n"
+        "3. **Generate the Word proposal.** Download the editable proposal and review it in Word.\n"
+        "4. **Create the final PDF and email.** Upload the reviewed Word proposal to generate the "
+        "complete PDF with Standard Terms and a fillable Work Authorization Form. Review and copy "
+        "the client email draft."
     )
 
 pending_draft = st.session_state.pop("pending_draft_restore", None)
@@ -627,17 +638,6 @@ if "proposal_facts" in st.session_state:
         st.warning("Please resolve before generating: " + "; ".join(missing))
 
     references = retrieve_references(facts)
-    if references:
-        with st.expander("Historical proposal matches", expanded=False):
-            st.caption(
-                "Historical proposals guide the scope and wording. "
-                "Word formatting uses the standard Almor template."
-            )
-            for match in references[:5]:
-                st.write(
-                    f"**{match.filename}** — {match.project_type}; "
-                    f"{', '.join(match.methods) or 'general geotechnical'}"
-                )
 
     st.divider()
     st.subheader("3. Generate the Word proposal")
@@ -709,21 +709,22 @@ if "generated_outputs" in st.session_state:
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         width="stretch",
     )
-    st.caption(f"Word layout source: {output['template']}")
 
+can_sign = st.session_state.get("access_role") == "signer"
 st.divider()
 st.subheader("4. Generate the PDF and email from the reviewed Word proposal")
 st.caption(
     "Upload the reviewed Word proposal to create one PDF containing the complete proposal, "
     "Standard Terms, and the original fillable Work Authorization form, plus the client email draft. "
-    "The original Word is automatically saved to the private proposal library. Missing standpipe scope is added to borehole proposals in the PDF; an updated Word copy is also available."
+    "If the standard standpipe clause is added to a borehole proposal, an updated Word copy is also available."
 )
+if can_sign:
+    st.caption("Generating the PDF also saves the original Word to the private proposal library.")
 complete_word_upload = st.file_uploader(
     "Reviewed Word proposal *",
     type=["docx"],
     key="complete_pdf_word_upload",
 )
-can_sign = st.session_state.get("access_role") == "signer"
 complete_pdf_signatures = False
 if can_sign:
     complete_pdf_signatures = st.toggle(
@@ -766,8 +767,7 @@ if complete_word_upload is not None:
         )
         complete_source_key = hashlib.sha256(
             (
-                f"auto-library-standpipe-v1|{complete_word_hash}|{int(complete_pdf_signatures)}|"
-                f"{complete_project_name}"
+                f"{complete_word_hash}|{int(can_sign)}|{int(complete_pdf_signatures)}|{complete_project_name}"
             ).encode("utf-8")
         ).hexdigest()
         st.info(
@@ -793,6 +793,7 @@ if create_complete_pdf_clicked and complete_details is not None and complete_fac
             output = generate_complete_package(
                 complete_word_bytes, complete_word_upload.name, complete_facts,
                 complete_scope, complete_details.budget, bool(can_sign and complete_pdf_signatures), library,
+                archive_source=can_sign,
             )
         output["source_key"] = complete_source_key
         st.session_state.complete_pdf_output = output
@@ -805,13 +806,13 @@ if create_complete_pdf_clicked and complete_details is not None and complete_fac
 
 complete_output = st.session_state.get("complete_pdf_output")
 if complete_output and complete_output["source_key"] == complete_source_key:
-    if complete_output["library_error"]:
+    if can_sign and complete_output["library_error"]:
         st.error("PDF generated, but the uploaded Word was not fully saved to the library: " + complete_output["library_error"])
         st.caption("Generate again to retry saving the Word to the library.")
-    else:
+    elif can_sign and complete_output["library_path"]:
         st.success("Uploaded Word saved to the proposal library: " + complete_output["library_path"])
     if complete_output["word_changed"]:
-        st.info("The standard standpipe clause was added to the PDF Scope of Work. The library retains your original upload.")
+        st.info("The standard standpipe clause was added to the PDF Scope of Work.")
         st.download_button(
             "Download Word with standpipe scope", data=complete_output["word"],
             file_name=complete_word_upload.name,
@@ -841,6 +842,9 @@ if complete_output and complete_output["source_key"] == complete_source_key:
         height=220,
         key=f"complete_email_body_{complete_output['source_key']}",
     )
+
+if not can_sign:
+    st.stop()
 
 st.divider()
 st.subheader("5. Add Final Proposal to Library")
