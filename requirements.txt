@@ -9,3 +9,6 @@ reportlab>=4.4,<5
 lxml>=5.0,<7
 cryptography>=45.0,<50
 requests>=2.32,<3
+extract-msg>=0.58.2,<0.59
+beautifulsoup4>=4.12,<5
+Pillow>=10,<13

@@ -4,3 +4,5 @@ fonts-liberation
 fonts-crosextra-carlito
 fonts-crosextra-caladea
 
+libreoffice-calc
+libreoffice-impress

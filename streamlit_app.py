@@ -25,7 +25,7 @@ from proposal_app.costs import (
 )
 from proposal_app.document_builder import build_standard_docx
 from proposal_app.draft_state import export_draft, import_draft
-from proposal_app.file_ingest import UploadedDocument
+from proposal_app.file_ingest import SUPPORTED_UPLOAD_TYPES, UploadedDocument
 from proposal_app.github_library import (
     GitHubLibrary,
     add_final_to_library,
@@ -410,7 +410,7 @@ if st.button("Switch access code"):
 with st.expander("How it works", expanded=False):
     st.markdown(
         "1. **Add the request.** Enter the proposal number and upload the downloaded client email "
-        "(.eml) or other supporting files. You can also paste the email. Select **Analyze request**.\n"
+        "(.msg or .eml), Word, PDF, Excel, images, or other supporting files. You can also paste the email. Select **Analyze request**.\n"
         "2. **Verify Proposal Information.** Review and edit the project details and investigation "
         "scope, then edit the **Cost table**.\n"
         "3. **Generate the Word proposal.** Download the editable proposal and review it in Word.\n"
@@ -450,9 +450,9 @@ email_text = st.text_area(
 )
 request_files = st.file_uploader(
     "Attachments",
-    type=["eml", "pdf", "png", "jpg", "jpeg", "docx", "xlsx", "xlsm", "csv", "txt"],
+    type=SUPPORTED_UPLOAD_TYPES,
     accept_multiple_files=True,
-    help="Upload the request email, screenshots, PDFs, drawings, notes, and cost table.",
+    help="Upload Outlook .msg or .eml emails, Word (.doc/.docx), PDF, Excel (.xls/.xlsx), presentations, images, or text. Email attachments are also analyzed. Maximum 20 MB per file.",
 )
 notes = st.text_area("Additional notes", height=100, key="request_notes")
 

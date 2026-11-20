@@ -11,6 +11,14 @@ private `DATA_ENCRYPTION_KEY` configured in Streamlit Secrets.
 The public website requires an access code to submit client material and use the
 proposal builder.
 
+Step 1 accepts Outlook `.msg` and `.eml` emails (including supported attachments),
+Word (`.doc`, `.docx`, `.docm`, `.odt`, `.rtf`), PDF, Excel (`.xls`, `.xlsx`,
+`.xlsm`, `.xlsb`, `.ods`), CSV/TSV, PowerPoint, common images, and text/HTML.
+Legacy Office files are converted with LibreOffice before analysis. PDFs and
+images also reach the vision model, including scanned pages. Each file must be
+20 MB or smaller. Damaged or password-protected files produce a named error;
+unsupported email attachments are identified as not analyzed in the extraction input.
+
 The default AI routing uses `gpt-5.6-luna` for request and attachment extraction,
 and `gpt-5.6-terra` for professional proposal drafting.
 

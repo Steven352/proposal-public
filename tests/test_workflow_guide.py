@@ -8,6 +8,21 @@ from proposal_app.models import ReferenceMatch
 
 
 class WorkflowGuideTest(unittest.TestCase):
+    @unittest.skipUnless(hasattr(AppTest, "file_uploader"), "requires AppTest file upload support")
+    def test_request_upload_accepts_outlook_messages(self):
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "streamlit_app.py"))
+        app.secrets["GITHUB_LIBRARY_TOKEN"] = ""
+        with patch("proposal_app.secure_bundle.ensure_private_assets"):
+            app.run()
+            app.text_input[0].set_value("805443")
+            app.button[0].click().run()
+
+        self.assertFalse(app.exception)
+        attachments = next(widget for widget in app.file_uploader if widget.label == "Attachments")
+        for suffix in (".msg", ".doc", ".docx", ".pdf", ".xls", ".xlsx", ".xlsm", ".csv", ".png", ".tiff"):
+            self.assertIn(suffix, attachments.allowed_type)
+        self.assertIn(".eml", attachments.allowed_type)
+
     def test_editor_does_not_show_private_reference_matches(self):
         match = ReferenceMatch(
             filename="Private Historical Proposal.docx", project_type="building",
