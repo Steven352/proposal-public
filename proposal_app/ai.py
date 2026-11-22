@@ -26,6 +26,11 @@ When boreholes or test pits have more than one termination depth, preserve every
 in borehole_program or test_pit_program. Use the legacy single quantity/depth fields only when there is
 one group. Never collapse multiple groups to the deepest value.
 
+Keep client_address and project_location as multiline postal addresses: street and any legal land
+reference on the first line, city and province on the next, and postal code on a separate final line.
+Retain supplied legal descriptions. Do not invent missing address components or repeat a project title
+inside the street address.
+
 Classify the project and investigation methods using plain professional terms. Put cost table rows in
 the four standard sections when possible. Leave genuinely missing optional fields empty and missing
 numeric fields null.
@@ -41,35 +46,21 @@ address, proposal number, project, quantities, depths or fees.
 All proposals use one fixed Almor Word layout. Historical references are writing examples only;
 they never select the Word template, headings, headers, personnel layout, fee table, terms or
 signature layout. This requirement takes precedence over historical layout suggestions in the rules.
-Use relevant examples to help write the current introduction and technical scope in Almor's style.
-Preserve applicable approved wording and make only changes needed for the current facts and scope.
-Never retain a historical client, project, location, proposal number or fee. User-provided or
-user-approved text has priority except where an explicitly required factual correction is necessary.
+Use relevant examples only for the introduction and client email. Never retain a historical client,
+project, location, proposal number or fee.
 
-Apply only scope modules supported by explicit request facts and non-zero cost items. Do not infer
-borehole/test-pit quantities or depths from hours. In the Scope of Work, do not name actual laboratory
-tests. The Word assembler supplies the approved laboratory-testing and geotechnical-report bullets
-when applicable. Treat borehole_program and test_pit_program as
-authoritative over the legacy single-value fields. Preserve every quantity/depth group in the
-field-program wording.
-
-For boreholes, use the drilling module: track-mounted solid-stem auger wording, SPT at 1.5 m intervals
-where conditions permit, pocket penetrometer testing, sampling, and logging.
-Every proposal with boreholes must include this standard scope, even when groundwater monitoring
-is not selected in investigation_methods or priced separately. This user-approved requirement takes
-precedence over scope-module filtering and historical rules. The Word assembler supplies: "Installation of 25 mm
+The Word assembler supplies the entire user-approved scope verbatim, in its fixed order.
+Return an empty field_program_intro and an empty field_program_paragraphs list. Do not add scope,
+rewrite it, improve its grammar, or infer extra services from costs, notes, or historical examples.
+Only the assembler changes investigation quantities, depths and method-dependent terms for test pits.
+Treat borehole_program and test_pit_program as authoritative over legacy single-value fields.
+Do not infer quantities or depths from contractor hours. Every proposal with boreholes must include
+this standard scope, even when groundwater monitoring is not selected: "Installation of 25 mm
 diameter standpipe piezometers in all boreholes, backfilled with cuttings and capped with bentonite.
 Groundwater readings will be taken at the end of drilling and during one follow-up visit two weeks after
-the field program." It also supplies the borehole GPS bullet and the closing field oversight,
-laboratory handling, environmental stewardship, and drill cuttings paragraph. Leave those fixed
-paragraphs out of the draft. Include separately scoped details in their own paragraphs.
-For test pits, use a distinct test-pit module: suitable excavator, excavation/logging, pocket
-penetrometer testing where possible, disturbed sampling, groundwater observations during excavation,
-GPS, and backfilling with excavated material. Do not use drilling, SPT, piezometer, or drill-cuttings
-wording for a test-pit-only program unless separately supported. When both programs are supplied,
-describe their quantity/depth groups separately.
-Do not produce headings because the fixed Word assembler supplies them. Use style=list for scope
-items and style=body for lead-ins or closing field-program paragraphs. cost_intro must contain prose
+the field program." The assembler supplies this clause. Users may edit or add scope manually in the
+Word proposal before uploading their reviewed document. Do not produce headings.
+cost_intro must contain prose
 only, never a Markdown or text table; the assembler creates the single authoritative fee table from
 the current cost items. The assembler controls standard personnel, terms and closing/signature copy;
 historical examples must not change those sections or the document layout.

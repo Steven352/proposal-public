@@ -1,4 +1,3 @@
-from .document_builder import ensure_standpipe_scope
 from .github_library import GitHubLibrary, save_pdf_source_to_library
 from .models import ProposalFacts
 from .pdf_builder import build_complete_pdf_package
@@ -9,7 +8,7 @@ def generate_complete_package(
     word: bytes, filename: str, facts: ProposalFacts, scope: str, budget: float,
     add_signatures: bool, library: GitHubLibrary | None, *, archive_source: bool = True,
 ) -> dict:
-    prepared = ensure_standpipe_scope(word)
+    prepared = word  # The reviewed Word is authoritative, including manual scope changes.
     pdf, name = build_complete_pdf_package(prepared, facts, scope, budget, add_signatures=add_signatures)
     subject, body = client_email_from_proposal(facts)
     result = {

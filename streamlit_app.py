@@ -574,7 +574,7 @@ if "proposal_facts" in st.session_state:
                 height=110,
                 placeholder="4 test pits to 3 m",
             )
-        st.caption("Add one scope item per row and select its category.")
+        st.caption("The Word proposal uses the approved scope wording. Only quantities, depths and investigation methods vary automatically. Edit or add scope clauses in the downloaded Word proposal before uploading the reviewed version.")
         edited_scope = st.data_editor(
             st.session_state.scope_frame,
             num_rows="dynamic",
@@ -716,7 +716,7 @@ st.subheader("4. Generate the PDF and email from the reviewed Word proposal")
 st.caption(
     "Upload the reviewed Word proposal to create one PDF containing the complete proposal, "
     "Standard Terms, and the original fillable Work Authorization form, plus the client email draft. "
-    "If the standard standpipe clause is added to a borehole proposal, an updated Word copy is also available."
+    "Your reviewed scope wording and manual additions are preserved."
 )
 if can_sign:
     st.caption("Generating the PDF also saves the original Word to the private proposal library.")

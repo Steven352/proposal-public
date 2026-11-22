@@ -91,9 +91,14 @@ and the app reports the error. Generate again to retry. Repeated generation pres
 review-learning records for the same file. Standard access generates an unsigned PDF and client
 email draft for the current session.
 
-Every borehole proposal includes the approved 25 mm standpipe piezometer scope, with readings
-at the end of drilling and one follow-up visit two weeks after the field program, regardless
-of the groundwater-monitoring selection. The Word assembler ensures a missing clause is
-added even if AI omits it. Uploaded borehole proposals missing the clause receive it in the
-PDF and an updated Word download. The archive uses the original upload. Existing standpipe
-clauses and test-pit-only proposals are preserved.
+The generated scope uses the approved nine bullets and closing paragraph verbatim, with only
+investigation quantities, depths, and necessary method-specific substitutions. AI output, historical
+examples, notes and cost rows cannot append or rewrite scope clauses. The laboratory bullet includes
+the approved disturbed-sample and discretionary Shelby-tube wording. Test-pit-only programs omit
+borehole-only SPT, Shelby-tube and standpipe wording. Users can edit or add clauses in the downloaded
+Word. The reviewed Word is preserved when creating the final PDF, without restoring removed clauses.
+
+Front matter uses one fixed letter layout: date/proposal number, client and multiline mailing address,
+Attention with contact title and email, the fixed Re line, and the multiline site address. City and
+province share a line; postal code is on its own line. Supplied legal descriptions are retained and
+missing address details are never invented.

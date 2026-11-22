@@ -21,38 +21,15 @@ from lxml import etree
 from .config import HISTORICAL_DIR, SECTION_ORDER, STANDARD_TEMPLATE_PATH
 from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
+from .fixed_scope import (
+    LABORATORY_SCOPE, STANDPIPE_SCOPE, BOREHOLE_GPS_SCOPE, REPORT_SCOPE,
+    BOREHOLE_SCOPE_CLOSING, approved_scope_blocks,
+)
+from .address_format import format_address, project_address
 
 
 ALMOR_BROWN = "663300"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-LABORATORY_SCOPE = (
-    "Collection of suitable soil samples for laboratory testing. Laboratory testing on selected "
-    "samples to assist with the determination of engineering properties. The actual tests conducted "
-    "will be a function of the soil conditions encountered."
-)
-STANDPIPE_SCOPE = (
-    "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with "
-    "cuttings and capped with bentonite. Groundwater readings will be taken at the end of "
-    "drilling and during one follow-up visit two weeks after the field program."
-)
-BOREHOLE_GPS_SCOPE = (
-    "Each of the completed boreholes shall be surveyed in the field using a medium precision handheld "
-    "GPS (+/- 10 m) to obtain UTM northing, eastings and approximate elevations. If precision "
-    "surveying is required, this work will be provided by others and is outside the scope of our proposal."
-)
-REPORT_SCOPE = (
-    "Preparation of a geotechnical report describing the work performed, presenting the findings, and "
-    "providing geotechnical recommendations to support the proposed development."
-)
-BOREHOLE_SCOPE_CLOSING = (
-    " All work will be overseen by qualified and experienced Almor field staff who will log the soil "
-    "and groundwater conditions encountered during the drilling program and collect suitable soil "
-    "samples. Following the field work, the samples will be returned to our office for review, and "
-    "submission to Almor’s laboratory for standard index testing. Almor understands the importance of "
-    "environmental stewardship at the site locations and shall minimize the impact from drilling. We "
-    "have assumed that all drill cuttings can be returned to the boreholes or scattered around the "
-    "boreholes at surface."
-)
 STANDARD_FIELD_PROGRAM_WORDING = (
     "Based on information supplied by the Client, Almor provides the following estimated cost "
     "to perform the geotechnical assessment, and any additional work directed by the Client "
@@ -170,8 +147,7 @@ def update_project_headers(document: DocumentType, facts: ProposalFacts) -> None
     values = [
         facts.client_name,
         "Proposal for Geotechnical Services",
-        ", ".join(value.replace("\n", ", ") for value in
-                  (facts.project_name, facts.project_location) if value.strip()),
+        project_address(facts.project_name, facts.project_location).replace("\n", ", "),
         f"Almor Proposal No.: {facts.proposal_number}",
     ]
     seen = set()
@@ -555,6 +531,38 @@ def update_front_matter(document: DocumentType, facts: ProposalFacts) -> dict[st
     }
 
 
+def format_standard_front_matter(document: DocumentType, facts: ProposalFacts) -> None:
+    """Use one letter layout regardless of the source template's paragraph slots."""
+    anchor = paragraph_by_text(document, "Introduction")
+    front = []
+    for paragraph in document.paragraphs:
+        if paragraph._p is anchor._p:
+            break
+        front.append(paragraph)
+    re_line = next(p for p in front if p.text.startswith("Re:"))
+    attention = next((p for p in front if p.text.startswith("Attention:")), front[front.index(re_line) - 1])
+    prototypes = [front[0], front[1], attention, re_line, front[-1]]
+    nodes = [deepcopy(p._p) for p in prototypes]
+    for paragraph in front:
+        paragraph._p.getparent().remove(paragraph._p)
+    for node in nodes:
+        anchor._p.addprevious(node)
+    date_row, client, attention, subject, location = [Paragraph(node, document) for node in nodes]
+    set_paragraph_text(date_row, f"\n{format_date(facts.proposal_date)}\tAlmor Proposal No.: {facts.proposal_number}")
+    client_lines = [facts.client_name, format_address(facts.client_address)]
+    set_paragraph_text(client, "\n".join(line for line in client_lines if line))
+    contact = ", ".join(value for value in (facts.contact_name, facts.contact_title) if value)
+    set_attention_text(attention, "Attention: " + contact, facts.contact_email)
+    set_paragraph_text(subject, "Re:\tRequest for Proposal for Geotechnical Services")
+    set_paragraph_text(location, project_address(facts.project_name, facts.project_location))
+    for paragraph in (date_row, client, attention):
+        paragraph.paragraph_format.space_after = Pt(12)
+    subject.paragraph_format.space_after = Pt(6)
+    location.paragraph_format.space_after = Pt(0)
+    location.paragraph_format.left_indent = Pt(0)
+    location.paragraph_format.first_line_indent = Pt(0)
+
+
 def update_cost_table(table: Table, facts: ProposalFacts) -> float:
     summary = normalize_cost_items(facts.cost_items)
     if summary.warnings:
@@ -866,31 +874,15 @@ def configure_personnel_section(
 def standard_field_program_blocks(
     facts: ProposalFacts, draft: DraftContent, has_boreholes: bool,
 ) -> list[ParagraphBlock]:
-    priced_sections = {item.section for item in normalize_cost_items(facts.cost_items).items if (item.estimate or 0) > 0}
-    fixed_bullets: list[tuple[str, str]] = []
-    if has_boreholes or facts.laboratory_tests or SECTION_ORDER[2] in priced_sections:
-        fixed_bullets.append((LABORATORY_SCOPE, r"(?:collection of suitable soil samples.*laboratory|laboratory testing on selected samples)"))
-    if has_boreholes:
-        fixed_bullets.extend([
-            (STANDPIPE_SCOPE, r"(?:install(?:ation of)?.*piezometers?|groundwater readings)"),
-            (BOREHOLE_GPS_SCOPE, r"each (?:of the )?(?:completed )?boreholes?.*(?:survey|gps)"),
-        ])
-    if has_boreholes or facts.reporting_requirements or SECTION_ORDER[3] in priced_sections:
-        fixed_bullets.append((REPORT_SCOPE, r"preparation of (?:an? )?(?:summary |brief |final )?(?:geotechnical |engineering )+report"))
-
-    owned_texts = [pattern for _, pattern in fixed_bullets]
-    if has_boreholes:
-        owned_texts.append(r"(?:all work will be overseen.*almor field staff|almor understands the importance of environmental stewardship|(?:we have assumed that )?(?:all )?drill cuttings)")
-    intro = STANDARD_FIELD_PROGRAM_WORDING if has_boreholes else draft.field_program_intro
-    blocks = [ParagraphBlock(text=intro, style="body")]
-    for block in draft.field_program_paragraphs:
-        text = " ".join(block.text.split())
-        if not any(re.match(pattern, text, re.IGNORECASE) for pattern in owned_texts):
-            blocks.append(block)
-    blocks.extend(ParagraphBlock(text=text, style="list") for text, _ in fixed_bullets)
-    if has_boreholes:
-        blocks.append(ParagraphBlock(text=BOREHOLE_SCOPE_CLOSING, style="body"))
-    return blocks
+    # AI drafting and historical examples cannot add or rewrite scope clauses.
+    scope = approved_scope_blocks(facts)
+    intro = STANDARD_FIELD_PROGRAM_WORDING
+    if not has_boreholes and (facts.test_pit_program or facts.test_pit_quantity or "test pits" in facts.investigation_methods):
+        intro = intro.replace("rig availability", "excavator availability")
+        intro = intro.replace("geotechnical boreholes", "geotechnical test pits")
+        intro = intro.replace("advanced using a track mounted solid stem auger drilling rig", "excavated using a suitable excavator")
+        intro = intro.replace("boreholes", "test pits").replace("track mounted drilling rig", "suitable excavator")
+    return [ParagraphBlock(text=intro, style="body"), *scope]
 
 
 def build_docx(
@@ -909,6 +901,8 @@ def build_docx(
         )})
     configure_personnel_section(document, include_proposed_project_personnel)
     old_values = update_front_matter(document, facts)
+    if standard_layout:
+        format_standard_front_matter(document, facts)
     if standard_layout:
         update_project_headers(document, facts)
 

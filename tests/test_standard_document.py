@@ -16,7 +16,7 @@ from proposal_app.models import CostLineItem, DraftContent, ParagraphBlock, Prop
 
 
 FIXED_SCOPE = (
-    "Collection of suitable soil samples for laboratory testing. Laboratory testing on selected "
+    "Collection of suitable disturbed soil samples for laboratory testing, including relatively undisturbed Shelby tube soil samples at the discretion of Almor, where possible. Laboratory testing on selected "
     "samples to assist with the determination of engineering properties. The actual tests conducted "
     "will be a function of the soil conditions encountered.",
     "Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with cuttings "
@@ -167,7 +167,7 @@ class StandardDocumentTest(unittest.TestCase):
     def test_fixed_borehole_scope_uses_the_approved_copy_once(self):
         with tempfile.TemporaryDirectory() as directory:
             base, _ = make_standard_templates(directory)
-            facts = sample_facts().model_copy(update={"investigation_methods": ["drilling", "test pits"]})
+            facts = sample_facts().model_copy(update={"investigation_methods": ["drilling"]})
             draft = sample_draft().model_copy(update={"field_program_paragraphs": [
                 ParagraphBlock(text="Drill three boreholes to 6 m.", style="list"),
                 ParagraphBlock(text="Installation of standpipe piezometers in selected boreholes.", style="list"),
@@ -177,7 +177,9 @@ class StandardDocumentTest(unittest.TestCase):
         scope = document_builder.paragraphs_between(
             result, "Geotechnical Field Program", "Cost of Geotechnical Services",
         )
-        self.assertEqual([p.text for p in scope[1:]], ["Drill three boreholes to 6 m.", *FIXED_SCOPE])
+        self.assertEqual([p.text for p in scope[-5:]], list(FIXED_SCOPE))
+        self.assertEqual(len(scope), 11)
+        self.assertFalse(any("Drill three boreholes to 6 m." == p.text for p in scope))
         self.assertEqual([p.style.name for p in scope[-5:]], ["List Bullet"] * 4 + ["Body"])
         shipped_text = [p.text for p in Document(document_builder.STANDARD_TEMPLATE_PATH).paragraphs]
         self.assertTrue(all(shipped_text.count(text) == 1 for text in FIXED_SCOPE))
@@ -193,7 +195,10 @@ class StandardDocumentTest(unittest.TestCase):
         scope = document_builder.paragraphs_between(
             result, "Geotechnical Field Program", "Cost of Geotechnical Services",
         )
-        self.assertEqual([p.text for p in scope[1:]], ["Excavate three test pits.", FIXED_SCOPE[0], FIXED_SCOPE[3]])
+        self.assertEqual(len(scope), 10)
+        self.assertIn("excavation/sampling of [quantity] test pits", scope[3].text)
+        self.assertIn(FIXED_SCOPE[3], [p.text for p in scope])
+        self.assertFalse(any("standpipe" in p.text or "Shelby" in p.text for p in scope))
         self.assertNotIn("borehole", scope[0].text.lower())
 
     def test_all_project_headers_use_current_facts_despite_historical_header_aliases(self):
