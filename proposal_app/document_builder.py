@@ -293,7 +293,8 @@ def format_standard_closure(document: DocumentType) -> None:
         if len(parts) == 2:
             set_paragraph_text(paragraph, "\t".join(parts))
         fmt = paragraph.paragraph_format
-        fmt.tab_stops.add_tab_stop(Inches(3.45))
+        # Keep the reviewer label, name and title on one column, shifted by two half-inch tabs.
+        fmt.tab_stops.add_tab_stop(Inches(4.45))
         fmt.space_before = Pt(55 if index == 1 else 0)
         fmt.space_after = Pt(6)
         fmt.keep_with_next = index < len(paragraphs[start:]) - 1
@@ -557,9 +558,14 @@ def format_standard_front_matter(document: DocumentType, facts: ProposalFacts) -
     set_paragraph_text(location, project_address(facts.project_name, facts.project_location))
     for paragraph in (date_row, client, attention):
         paragraph.paragraph_format.space_after = Pt(12)
-    subject.paragraph_format.space_after = Pt(6)
+    subject.paragraph_format.space_after = Pt(0)
+    subject.paragraph_format.left_indent = Inches(0.5)
+    subject.paragraph_format.first_line_indent = Inches(-0.5)
+    subject.paragraph_format.tab_stops.clear_all()
+    subject.paragraph_format.tab_stops.add_tab_stop(Inches(0.5))
+    location.paragraph_format.space_before = Pt(0)
     location.paragraph_format.space_after = Pt(0)
-    location.paragraph_format.left_indent = Pt(0)
+    location.paragraph_format.left_indent = Inches(0.5)
     location.paragraph_format.first_line_indent = Pt(0)
 
 

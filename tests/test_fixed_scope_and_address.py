@@ -108,6 +108,17 @@ class FixedScopeAndAddressTest(unittest.TestCase):
             '200 & 202 Sample Street NE (Lot 1 & 2, Block 3, Plan 1234 A)\nCalgary, Alberta\nT2E 4K4',
         ])
 
+    def test_subject_and_site_address_align_without_a_blank_gap(self):
+        from docx.shared import Pt
+        for document in (build(facts_for_scope()), Document(document_builder.STANDARD_TEMPLATE_PATH)):
+            subject, address = document.paragraphs[3:5]
+            self.assertEqual(subject.paragraph_format.space_after, Pt(0))
+            self.assertEqual(address.paragraph_format.space_before, Pt(0))
+            self.assertEqual(subject.paragraph_format.left_indent, Pt(36))
+            self.assertEqual(subject.paragraph_format.first_line_indent, Pt(-36))
+            self.assertEqual(address.paragraph_format.left_indent, subject.paragraph_format.left_indent)
+            self.assertEqual(address.paragraph_format.first_line_indent, Pt(0))
+
     def test_repeating_header_does_not_duplicate_the_street_address(self):
         document = build(facts_for_scope(
             project_name='200 Sample Street NE (Lot 1, Block 3, Plan 1234 A)',

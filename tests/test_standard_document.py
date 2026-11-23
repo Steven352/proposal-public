@@ -419,6 +419,18 @@ class StandardDocumentTest(unittest.TestCase):
             paragraph = next(p for p in result.paragraphs if p.text == heading)
             self.assertTrue(paragraph.paragraph_format.page_break_before)
 
+    def test_reviewer_column_moves_together_by_two_standard_tabs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base, _ = make_standard_templates(directory)
+            result, _ = self.build(base)
+        labels = next(p for p in result.paragraphs if p.text.startswith("Prepared by"))
+        names = next(p for p in result.paragraphs if p.text.startswith("Example Author"))
+        titles = next(p for p in result.paragraphs if p.text == "Example title\tExample title")
+        self.assertEqual(labels.paragraph_format.tab_stops[0].position, Inches(4.45))
+        self.assertEqual(titles.paragraph_format.tab_stops[0].position, Inches(4.45))
+        self.assertEqual(names.paragraph_format.tab_stops[0].position, Inches(4.45))
+        self.assertEqual(names.text, "Example Author\tExample Reviewer")
+
     def test_signature_group_stays_together_with_standard_font_sizes(self):
         with tempfile.TemporaryDirectory() as directory:
             base, _ = make_standard_templates(directory)
