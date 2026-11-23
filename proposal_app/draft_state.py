@@ -29,6 +29,25 @@ def _frame_rows(frame: pd.DataFrame | None) -> list[dict[str, Any]]:
     return frame.fillna("").to_dict(orient="records")
 
 
+COST_COLUMNS = ["Section", "Item", "Description", "Unit", "Est.", "Rate", "Total"]
+COST_NUMERIC_COLUMNS = ["Est.", "Rate", "Total"]
+
+
+def cost_frame_from_rows(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    """Rebuild an editable cost table with the dtypes the Streamlit editor needs.
+
+    Saved drafts store blanks as "" which turns the numeric columns into object
+    columns; the editor then refuses to edit them. Restore proper types here.
+    """
+    frame = pd.DataFrame(rows).reindex(columns=COST_COLUMNS)
+    for column in COST_NUMERIC_COLUMNS:
+        frame[column] = pd.to_numeric(frame[column].replace("", None), errors="coerce").astype("float64")
+    for column in COST_COLUMNS:
+        if column not in COST_NUMERIC_COLUMNS:
+            frame[column] = frame[column].fillna("").astype(str)
+    return frame.reset_index(drop=True)
+
+
 def export_draft(
     *,
     facts: ProposalFacts,

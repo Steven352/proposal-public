@@ -24,7 +24,7 @@ from proposal_app.costs import (
     standard_cost_items,
 )
 from proposal_app.document_builder import build_standard_docx
-from proposal_app.draft_state import export_draft, import_draft
+from proposal_app.draft_state import cost_frame_from_rows, export_draft, import_draft
 from proposal_app.file_ingest import SUPPORTED_UPLOAD_TYPES, UploadedDocument
 from proposal_app.github_library import (
     GitHubLibrary,
@@ -364,8 +364,9 @@ def initialize_editor(facts: ProposalFacts) -> None:
     # A data editor keeps its own row/cell patch state under its widget key.
     # Clear that state only when loading a different proposal; changing the
     # editor's source frame on every rerun makes the first edit appear lost.
-    st.session_state.pop("scope_editor", None)
-    st.session_state.pop("cost_editor", None)
+    # The browser keeps the old edits for a widget id, so a new key (not just
+    # clearing session state) is needed to make the editors accept the new data.
+    st.session_state.editor_version = st.session_state.get("editor_version", 0) + 1
     borehole_program = facts.borehole_program or legacy_program(
         facts.borehole_quantity,
         facts.borehole_depth_m,
@@ -430,7 +431,7 @@ if pending_draft is not None:
     if restored.scope_rows:
         st.session_state.scope_frame = pd.DataFrame(restored.scope_rows)
     if restored.cost_rows:
-        st.session_state.cost_frame = pd.DataFrame(restored.cost_rows)
+        st.session_state.cost_frame = cost_frame_from_rows(restored.cost_rows)
     st.session_state.include_proposed_project_personnel = restored.include_proposed_project_personnel
     st.session_state.pop("generated_outputs", None)
     st.session_state.draft_restore_message = "Draft restored. Review the fields before generating."
@@ -586,7 +587,7 @@ if "proposal_facts" in st.session_state:
                 ),
                 "Value": st.column_config.TextColumn(),
             },
-            key="scope_editor",
+            key=f"scope_editor_{st.session_state.get('editor_version', 0)}",
         )
         st.text_area("Other notes", key="edit_other_notes", height=90)
 
@@ -617,7 +618,7 @@ if "proposal_facts" in st.session_state:
                 "Rate": st.column_config.NumberColumn(min_value=0.0, format="$%.2f"),
                 "Total": st.column_config.NumberColumn(min_value=0.0, format="$%.2f"),
             },
-            key="cost_editor",
+            key=f"cost_editor_{st.session_state.get('editor_version', 0)}",
             disabled=["Total"],
         ))
         preview = normalize_cost_items(dataframe_costs(edited_costs))
