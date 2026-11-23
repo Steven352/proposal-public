@@ -1016,6 +1016,49 @@ def build_standard_docx(
     )
 
 
+def build_cost_page_docx(facts: ProposalFacts) -> tuple[bytes, str]:
+    """Build a Word file containing only the cost page of the standard proposal.
+
+    The standard layout does not use AI-written text for the cost section, so the
+    full proposal is built with neutral placeholders and trimmed to the cost page.
+    """
+    placeholder = DraftContent(
+        introduction="-", field_program_intro="-", field_program_paragraphs=[],
+        cost_intro="-", terms_and_conditions="-", closure_paragraph_1="-",
+        closure_paragraph_2="-", work_authorization_scope="-", email_subject="-",
+        email_body="-",
+    )
+    full_bytes, full_name = build_standard_docx(facts, placeholder)
+    document = Document(io.BytesIO(full_bytes))
+    body = document.element.body
+    blocks = list(body.iterchildren())
+    start = blocks.index(paragraph_by_text(document, "Cost of Geotechnical Services")._p)
+    end = blocks.index(paragraph_by_text(document, "Terms and Conditions")._p)
+    for index, node in enumerate(blocks):
+        if node.tag.endswith("}sectPr"):
+            continue
+        if not start <= index < end:
+            body.remove(node)
+    heading = paragraph_by_text(document, "Cost of Geotechnical Services")
+    heading.paragraph_format.page_break_before = False
+    # Section numbering only makes sense inside the full proposal; the heading
+    # style supplies it, so switch it off explicitly (numId 0).
+    p_pr = heading._p.get_or_add_pPr()
+    existing = p_pr.find(qn("w:numPr"))
+    if existing is not None:
+        p_pr.remove(existing)
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "0")
+    num_pr.append(num_id)
+    p_pr.append(num_pr)
+    heading.paragraph_format.left_indent = Inches(0)
+    heading.paragraph_format.first_line_indent = Inches(0)
+    output = io.BytesIO()
+    document.save(output)
+    return output.getvalue(), Path(full_name).stem + " - Cost Page.docx"
+
+
 def ensure_standpipe_scope(data: bytes, required: bool = False) -> bytes:
     """Ensure borehole proposals include the approved standpipe scope in the field program."""
     document = Document(io.BytesIO(data))

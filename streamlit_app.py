@@ -23,7 +23,7 @@ from proposal_app.costs import (
     normalize_cost_items,
     standard_cost_items,
 )
-from proposal_app.document_builder import build_standard_docx
+from proposal_app.document_builder import build_cost_page_docx, build_standard_docx
 from proposal_app.draft_state import cost_frame_from_rows, export_draft, import_draft
 from proposal_app.file_ingest import SUPPORTED_UPLOAD_TYPES, UploadedDocument
 from proposal_app.github_library import (
@@ -360,6 +360,11 @@ def facts_from_editor(
     )
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def cached_cost_page(facts_json: str) -> tuple[bytes, str]:
+    return build_cost_page_docx(ProposalFacts.model_validate_json(facts_json))
+
+
 def initialize_editor(facts: ProposalFacts) -> None:
     # A data editor keeps its own row/cell patch state under its widget key.
     # Clear that state only when loading a different proposal; changing the
@@ -627,6 +632,22 @@ if "proposal_facts" in st.session_state:
             with column:
                 st.metric(section, f"${preview.section_totals[section]:,.2f}")
         st.metric("Estimated Cost", f"${preview.final_total:,.2f}")
+        cost_page_facts = facts_from_editor(current, edited_costs, edited_scope)
+        try:
+            cost_page_bytes, cost_page_name = cached_cost_page(cost_page_facts.model_dump_json())
+        except Exception as error:
+            cost_page_bytes = None
+            st.caption(f"Cost page download unavailable: {error}")
+        if cost_page_bytes is not None:
+            st.download_button(
+                "Download cost page",
+                data=cost_page_bytes,
+                file_name=cost_page_name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                width="stretch",
+                key="download_cost_page",
+                help="Word file containing only the Cost of Geotechnical Services page.",
+            )
 
     facts = facts_from_editor(current, edited_costs, edited_scope)
     if facts.proposal_number != current.proposal_number:

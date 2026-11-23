@@ -477,3 +477,17 @@ class StandardDocumentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CostPageDocumentTest(unittest.TestCase):
+    def test_cost_page_contains_only_cost_section(self):
+        facts = sample_facts()
+        data, name = document_builder.build_cost_page_docx(facts)
+        self.assertTrue(name.endswith("Cost Page.docx"))
+        document = Document(io.BytesIO(data))
+        texts = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+        self.assertEqual(texts[0], "Cost of Geotechnical Services")
+        for heading in ("Introduction", "Terms and Conditions", "Closure", "Geotechnical Field Program"):
+            self.assertNotIn(heading, texts)
+        self.assertEqual(len(document.tables), 1)
+        self.assertIn("Estimated Cost", document.tables[0].rows[-1].cells[4].text)
