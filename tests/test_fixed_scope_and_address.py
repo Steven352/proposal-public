@@ -11,14 +11,14 @@ from test_standard_document import sample_draft
 APPROVED_SCOPE = [
     'A review of available background geological and geotechnical information.',
     'Coordinate utility locates and secondary utility clearance before drilling.',
-    'Field examination of the proposed building site area and drilling/sampling of four (4) boreholes to a minimum depth of 6.0 metres below existing grade, refusal, or depths sufficient to establish subsurface conditions, whichever is least. Borehole locations will be determined based on access and utility considerations.',
-    'Detailed logging of the soil stratigraphy, bedrock conditions and groundwater conditions encountered during drilling activities, based on logging procedures in accordance with the Modified Unified Soil Classification System (MUSCS) found in the Canadian Foundation Engineering Manual (CFEM) and applicable ASTM standards.',
-    'Perform in-situ soil consistency tests (i.e. SPT) at 1.5m intervals, if soil conditions are favourable. Pocket penetrometer tests will be conducted in the field where possible.',
+    'Field examination and drilling/sampling of four (4) boreholes to a minimum depth of 6.0 m below existing grade, refusal, or to depths sufficient to establish subsurface conditions, whichever is the least. Borehole locations will be selected based on site access and utility considerations.',
+    'Detailed logging of the soil stratigraphy, bedrock conditions, and groundwater conditions encountered during drilling, based on logging procedures in accordance with the Modified Unified Soil Classification System (MUSCS) found in the Canadian Foundation Engineering Manual (CFEM) and applicable ASTM standards.',
+    'Standard Penetration Testing (SPT) at 1.5 m intervals where soil conditions permit. Pocket penetrometer tests will be conducted in the field where possible.',
     'Collection of suitable disturbed soil samples for laboratory testing, including relatively undisturbed Shelby tube soil samples at the discretion of Almor, where possible. Laboratory testing on selected samples to assist with the determination of engineering properties. The actual tests conducted will be a function of the soil conditions encountered.',
     'Installation of 25 mm diameter standpipe piezometers in all boreholes, backfilled with cuttings and capped with bentonite. Groundwater readings will be taken at the end of drilling and during one follow-up visit two weeks after the field program.',
     'Each of the completed boreholes shall be surveyed in the field using a medium precision handheld GPS (+/- 10 m) to obtain UTM northing, eastings and approximate elevations. If precision surveying is required, this work will be provided by others and is outside the scope of our proposal.',
     'Preparation of a geotechnical report describing the work performed, presenting the findings, and providing geotechnical recommendations to support the proposed development.',
-    ' All work will be overseen by qualified and experienced Almor field staff who will log the soil and groundwater conditions encountered during the drilling program and collect suitable soil samples. Following the field work, the samples will be returned to our office for review, and submission to Almor’s laboratory for standard index testing. Almor understands the importance of environmental stewardship at the site locations and shall minimize the impact from drilling. We have assumed that all drill cuttings can be returned to the boreholes or scattered around the boreholes at surface.',
+    'All work will be overseen by qualified and experienced Almor field staff who will log the soil and groundwater conditions encountered during the drilling program and collect suitable soil samples. Following the field work, the samples will be returned to our office for review, and submission to Almor’s laboratory for standard index testing. Almor understands the importance of environmental stewardship at the site locations and shall minimize the impact from drilling. We have assumed that all drill cuttings can be returned to the boreholes or scattered around the boreholes at surface.',
 ]
 
 
@@ -68,7 +68,7 @@ class FixedScopeAndAddressTest(unittest.TestCase):
         result = [p.text for p in self.scope(build(facts))]
         expected = APPROVED_SCOPE.copy()
         expected[2] = (
-            'Field examination of the proposed building site area and drilling/sampling of two (2) boreholes to a minimum depth of 4.0 metres and three (3) boreholes to a minimum depth of 7.5 metres below existing grade, refusal, or depths sufficient to establish subsurface conditions, whichever is least. Borehole locations will be determined based on access and utility considerations.'
+            'Field examination and drilling/sampling of two (2) boreholes to a minimum depth of 4.0 m and three (3) boreholes to a minimum depth of 7.5 m below existing grade, refusal, or to depths sufficient to establish subsurface conditions, whichever is the least. Borehole locations will be selected based on site access and utility considerations.'
         )
         self.assertEqual(result, expected)
 
@@ -76,9 +76,9 @@ class FixedScopeAndAddressTest(unittest.TestCase):
         facts = facts_for_scope(borehole_program=[], investigation_methods=['test pits'],
             test_pit_program=[InvestigationDepthGroup(quantity=2, termination_depth_m=3)])
         result = [p.text for p in self.scope(build(facts))]
-        self.assertEqual(len(result), 9)  # Eight bullets, no standpipe, and the closing paragraph.
+        self.assertEqual(len(result), 10)  # Nine bullets, no standpipe, and the closing paragraph.
         self.assertEqual(result[0], APPROVED_SCOPE[0])
-        self.assertIn('excavation/sampling of two (2) test pits to a minimum depth of 3.0 metres', result[2])
+        self.assertIn('excavation/sampling of two (2) test pits to a minimum depth of 3.0 m', result[2])
         self.assertEqual(result[-2], APPROVED_SCOPE[-2])
         text = ' '.join(result).lower()
         for inappropriate in ('borehole', 'drilling', 'spt', 'shelby', 'piezometer', 'drill cuttings'):
@@ -87,9 +87,9 @@ class FixedScopeAndAddressTest(unittest.TestCase):
     def test_mixed_program_keeps_borehole_copy_and_includes_each_test_pit_group(self):
         facts = facts_for_scope(test_pit_program=[InvestigationDepthGroup(quantity=1, termination_depth_m=2.5)])
         result = [p.text for p in self.scope(build(facts))]
-        self.assertEqual(len(result), 10)
-        self.assertIn('four (4) boreholes to a minimum depth of 6.0 metres', result[2])
-        self.assertIn('one (1) test pit to a minimum depth of 2.5 metres', result[2])
+        self.assertEqual(len(result), 11)
+        self.assertIn('four (4) boreholes to a minimum depth of 6.0 m', result[2])
+        self.assertIn('one (1) test pit to a minimum depth of 2.5 m', result[2])
         self.assertEqual(result[6], APPROVED_SCOPE[6])
 
     def test_address_block_has_separate_street_city_province_and_postal_lines(self):

@@ -22,27 +22,14 @@ from .config import HISTORICAL_DIR, SECTION_ORDER, STANDARD_TEMPLATE_PATH
 from .costs import format_money, normalize_cost_items
 from .models import DraftContent, ParagraphBlock, ProposalFacts
 from .fixed_scope import (
-    LABORATORY_SCOPE, STANDPIPE_SCOPE, BOREHOLE_GPS_SCOPE, REPORT_SCOPE,
-    BOREHOLE_SCOPE_CLOSING, approved_scope_blocks,
+    STANDPIPE_SCOPE,
+    approved_field_program_blocks,
 )
 from .address_format import format_address, project_address
 
 
 ALMOR_BROWN = "663300"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-STANDARD_FIELD_PROGRAM_WORDING = (
-    "Based on information supplied by the Client, Almor provides the following estimated cost "
-    "to perform the geotechnical assessment, and any additional work directed by the Client "
-    "will constitute a change in the scope of work. "
-    "The geotechnical field program could be initiated within two weeks subject to rig availability "
-    "and locates, subsequent to authorization. The estimated costs do not include environmental "
-    "considerations of the development.  The field program will include geotechnical boreholes "
-    "advanced using a track mounted solid stem auger drilling rig. It is our understanding access "
-    "and clearing, if required, to the boreholes is suitable for a track mounted drilling rig and "
-    "will be provided by the client as this work is outside the scope of our proposal.  The proposed "
-    "scope of work for this project includes:"
-)
-
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
 STANDARD_COST_INTRO = (
     "Based on the information provided by the Client, Almor provides the following estimated cost "
@@ -219,7 +206,7 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
     section = document.sections[0]
     total_width = (section.page_width - section.left_margin - section.right_margin
                    - Inches(0.2)) // 635
-    widths = [round(total_width * proportion) for proportion in (0.30, 0.33, 0.06, 0.06, 0.13)]
+    widths = [round(total_width * proportion) for proportion in (0.27, 0.40, 0.06, 0.07, 0.095)]
     widths.append(total_width - sum(widths))
     table.autofit = False
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -255,7 +242,7 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
             margins = OxmlElement("w:tcMar")
             for side in ("top", "left", "bottom", "right"):
                 margin = OxmlElement("w:" + side)
-                margin.set(qn("w:w"), "50" if side in ("left", "right") else "60")
+                margin.set(qn("w:w"), "50" if side in ("left", "right") else "30")
                 margin.set(qn("w:type"), "dxa")
                 margins.append(margin)
             cell_properties.append(margins)
@@ -263,7 +250,7 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
                 cell_properties.append(OxmlElement("w:noWrap"))
             for paragraph in cell.paragraphs:
                 paragraph.style = "Normal"
-                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 fmt = paragraph.paragraph_format
                 fmt.space_before = Pt(0)
                 fmt.space_after = Pt(0)
@@ -274,6 +261,37 @@ def format_standard_cost_table(table: Table, document: DocumentType) -> None:
                     run.font.size = Pt(8)
                     run.font.color.rgb = RGBColor.from_string("FFFFFF" if heading_row else "000000")
                     run.bold = heading_row or (total_row and column_index >= 4)
+                # Size empty cells' paragraph marks like the text so every row has the same height.
+                paragraph_properties = paragraph._p.get_or_add_pPr()
+                mark = paragraph_properties.find(qn("w:rPr"))
+                if mark is None:
+                    mark = OxmlElement("w:rPr")
+                    paragraph_properties.append(mark)
+                for tag in ("w:sz", "w:szCs"):
+                    size = mark.find(qn(tag))
+                    if size is None:
+                        size = OxmlElement(tag)
+                        mark.append(size)
+                    size.set(qn("w:val"), "16")
+    merge_standard_cost_rows(table, widths)
+
+
+def merge_standard_cost_rows(table: Table, widths: list[int]) -> None:
+    """Section titles span the full row; the Estimated Cost label spans Est. and Rate."""
+    for index, row in enumerate(table.rows):
+        cells = row.cells
+        if index and cells[0].text and all(not cell.text for cell in cells[1:]):
+            merged = cells[0].merge(cells[-1])
+            width = sum(widths)
+        elif cells[4].text == "Estimated Cost":
+            merged = cells[3].merge(cells[4])
+            width = widths[3] + widths[4]
+        else:
+            continue
+        for paragraph in list(merged.paragraphs):
+            if not paragraph.text and len(merged.paragraphs) > 1:
+                paragraph._p.getparent().remove(paragraph._p)
+        merged.width = Twips(width)
 
 
 def format_standard_closure(document: DocumentType) -> None:
@@ -645,6 +663,8 @@ def update_cost_section(
     if standard_layout:
         set_paragraph_text(paragraphs[0], STANDARD_COST_INTRO)
         set_paragraph_text(paragraphs[-1], STANDARD_COST_SUMMARY.format(total=format_money(final_total)))
+        # Long cost tables must move the fee paragraph whole to the next page, never split it.
+        paragraphs[-1].paragraph_format.keep_together = True
         return
     set_paragraph_text(paragraphs[0], clean_cost_intro(draft.cost_intro))
     total_paragraph = next(
@@ -877,18 +897,34 @@ def configure_personnel_section(
     )
 
 
-def standard_field_program_blocks(
-    facts: ProposalFacts, draft: DraftContent, has_boreholes: bool,
-) -> list[ParagraphBlock]:
+def standard_field_program_blocks(facts: ProposalFacts) -> list[ParagraphBlock]:
     # AI drafting and historical examples cannot add or rewrite scope clauses.
-    scope = approved_scope_blocks(facts)
-    intro = STANDARD_FIELD_PROGRAM_WORDING
-    if not has_boreholes and (facts.test_pit_program or facts.test_pit_quantity or "test pits" in facts.investigation_methods):
-        intro = intro.replace("rig availability", "excavator availability")
-        intro = intro.replace("geotechnical boreholes", "geotechnical test pits")
-        intro = intro.replace("advanced using a track mounted solid stem auger drilling rig", "excavated using a suitable excavator")
-        intro = intro.replace("boreholes", "test pits").replace("track mounted drilling rig", "suitable excavator")
-    return [ParagraphBlock(text=intro, style="body"), *scope]
+    return approved_field_program_blocks(facts)
+
+
+INTRODUCTION_PURPOSE = (
+    "The purpose of the investigation is to characterize the subsurface soil and groundwater "
+    "conditions at the site and provide geotechnical recommendations to support construction of "
+    "the proposed development."
+)
+TEMPLATE_INTRODUCTION_SENTENCES = re.compile(
+    r"At the request of\b.*?\babove-noted project\.\s*"
+    r"|The purpose of the investigation\b.*?(?:\.\s*|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def introduction_text(facts: ProposalFacts, draft: DraftContent) -> str:
+    """Fixed opening and purpose; only the client and the AI project description change."""
+    client = facts.client_name.strip()
+    contact = facts.contact_name.strip()
+    requester = f"{contact} of {client}" if contact else client
+    opening = (
+        f"At the request of {requester} (Client), Almor Testing Services Ltd. (Almor) is pleased to "
+        "provide this proposal for geotechnical engineering services for the above-noted project."
+    )
+    description = " ".join(TEMPLATE_INTRODUCTION_SENTENCES.sub("", draft.introduction).split())
+    return " ".join(part for part in (opening, description, INTRODUCTION_PURPOSE) if part)
 
 
 def build_docx(
@@ -916,7 +952,10 @@ def build_docx(
         document,
         "Introduction",
         following_section_heading(document, "Introduction").text.strip(),
-        [ParagraphBlock(text=draft.introduction, style="body")],
+        [ParagraphBlock(
+            text=introduction_text(facts, draft) if standard_layout else draft.introduction,
+            style="body",
+        )],
     )
 
     has_boreholes = bool(
@@ -924,7 +963,7 @@ def build_docx(
         or any(method.strip().casefold() == "drilling" for method in facts.investigation_methods)
     )
     if standard_layout:
-        field_blocks = standard_field_program_blocks(facts, draft, has_boreholes)
+        field_blocks = standard_field_program_blocks(facts)
     else:
         field_blocks = [ParagraphBlock(text=draft.field_program_intro, style="body"), *draft.field_program_paragraphs]
     replace_section(

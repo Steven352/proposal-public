@@ -51,6 +51,11 @@ def standard_cost_items() -> list[CostLineItem]:
         ("Engineering Analysis & Report Preparation", "Junior Professional", "", "hr", 0, 135.0),
         ("Engineering Analysis & Report Preparation", "Intermediate Professional", "", "hr", 0, 185.0),
         ("Engineering Analysis & Report Preparation", "Senior Professional", "", "hr", 0, 250.0),
+        ("Materials Testing - Concrete Testing", "Technician (III)", "5 tests at 8hrs/test", "hr", 0, 115.0),
+        ("Materials Testing - Concrete Testing", "Concrete Cylinder (Breaks)", "CSA A23.2-9C", "Ea", 0, 35.0),
+        ("Materials Testing - Concrete Testing", "Concrete Cylinders (Prep)", "Curing and 'End' Prep", "Ea", 0, 25.0),
+        ("Materials Testing - Concrete Testing", "Mileage Surcharge", "10 trips, 400km/trip", "km", 0, 0.95),
+        ("Materials Testing - Concrete Testing", "Senior Professional", "Reporting and Review", "hr", 0, 250.0),
     ]
     return [
         CostLineItem(
@@ -68,9 +73,13 @@ def standard_cost_items() -> list[CostLineItem]:
 
 def merge_standard_cost_items(items: list[CostLineItem]) -> list[CostLineItem]:
     merged = standard_cost_items()
-    positions = {clean_text(item.item).lower(): index for index, item in enumerate(merged)}
+    def key_of(item: CostLineItem) -> tuple[str, str]:
+        # Keyed by section too: "Senior Professional" exists in two sections.
+        return normalize_section(item.section), clean_text(item.item).lower()
+
+    positions = {key_of(item): index for index, item in enumerate(merged)}
     for item in items:
-        key = clean_text(item.item).lower()
+        key = key_of(item)
         if key in positions:
             merged[positions[key]] = item
         else:
@@ -114,6 +123,8 @@ def clean_text(value: object) -> str:
 def normalize_section(value: object) -> str:
     text = clean_text(value)
     lowered = text.lower()
+    if "material" in lowered or "concrete" in lowered:
+        return SECTION_ORDER[4]
     if "prelim" in lowered or "meeting" in lowered:
         return SECTION_ORDER[0]
     if "lab" in lowered:

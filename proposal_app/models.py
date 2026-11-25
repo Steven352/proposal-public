@@ -68,7 +68,11 @@ class ParagraphBlock(BaseModel):
 
 
 class DraftContent(BaseModel):
-    introduction: str
+    introduction: str = Field(description=(
+        "Only the project description sentence(s), starting with 'Almor understands that the "
+        "proposed development consists of'. Do not include the 'At the request of' opening or "
+        "the 'The purpose of the investigation' sentence; the Word template adds both."
+    ))
     field_program_intro: str
     field_program_paragraphs: list[ParagraphBlock]
     cost_intro: str

@@ -613,11 +613,12 @@ if "proposal_facts" in st.session_state:
                         "Field Program",
                         "Laboratory Testing Program",
                         "Engineering Analysis & Report Preparation",
+                        "Materials Testing - Concrete Testing",
                     ],
                 ),
                 "Unit": st.column_config.SelectboxColumn(
-                    options=["hr", "LS", "Ea"],
-                    help="Every line item can be changed to hourly, lump sum, or each.",
+                    options=["hr", "LS", "Ea", "km"],
+                    help="Every line item can be changed to hourly, lump sum, each, or kilometres.",
                 ),
                 "Est.": st.column_config.NumberColumn(min_value=0.0),
                 "Rate": st.column_config.NumberColumn(min_value=0.0, format="$%.2f"),
@@ -627,7 +628,7 @@ if "proposal_facts" in st.session_state:
             disabled=["Total"],
         ))
         preview = normalize_cost_items(dataframe_costs(edited_costs))
-        subtotal_columns = st.columns(4)
+        subtotal_columns = st.columns(len(preview.section_totals))
         for column, section in zip(subtotal_columns, preview.section_totals, strict=True):
             with column:
                 st.metric(section, f"${preview.section_totals[section]:,.2f}")

@@ -49,6 +49,11 @@ signature layout. This requirement takes precedence over historical layout sugge
 Use relevant examples only for the introduction and client email. Never retain a historical client,
 project, location, proposal number or fee.
 
+For introduction, write only the project description, beginning "Almor understands that the proposed
+development consists of", stating the development type, size/unit count, address/location, number of
+levels above and below grade and associated features exactly as supported by the facts. Do not add the
+"At the request of" opening or the investigation-purpose sentence; the Word template supplies both.
+
 The Word assembler supplies the entire user-approved scope verbatim, in its fixed order.
 Return an empty field_program_intro and an empty field_program_paragraphs list. Do not add scope,
 rewrite it, improve its grammar, or infer extra services from costs, notes, or historical examples.

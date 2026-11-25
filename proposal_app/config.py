@@ -34,4 +34,5 @@ SECTION_ORDER = (
     "Field Program",
     "Laboratory Testing Program",
     "Engineering Analysis & Report Preparation",
+    "Materials Testing - Concrete Testing",
 )

@@ -27,7 +27,7 @@ FIXED_SCOPE = (
     "surveying is required, this work will be provided by others and is outside the scope of our proposal.",
     "Preparation of a geotechnical report describing the work performed, presenting the findings, and "
     "providing geotechnical recommendations to support the proposed development.",
-    " All work will be overseen by qualified and experienced Almor field staff who will log the soil "
+    "All work will be overseen by qualified and experienced Almor field staff who will log the soil "
     "and groundwater conditions encountered during the drilling program and collect suitable soil "
     "samples. Following the field work, the samples will be returned to our office for review, and "
     "submission to Almor’s laboratory for standard index testing. Almor understands the importance of "
@@ -195,7 +195,7 @@ class StandardDocumentTest(unittest.TestCase):
         scope = document_builder.paragraphs_between(
             result, "Geotechnical Field Program", "Cost of Geotechnical Services",
         )
-        self.assertEqual(len(scope), 10)
+        self.assertEqual(len(scope), 11)  # Intro, nine test-pit bullets and the closing paragraph.
         self.assertIn("excavation/sampling of [quantity] test pits", scope[3].text)
         self.assertIn(FIXED_SCOPE[3], [p.text for p in scope])
         self.assertFalse(any("standpipe" in p.text or "Shelby" in p.text for p in scope))
@@ -252,10 +252,10 @@ class StandardDocumentTest(unittest.TestCase):
             "will constitute a change in the scope of work. "
             "The geotechnical field program could be initiated within two weeks subject to rig availability "
             "and locates, subsequent to authorization. The estimated costs do not include environmental "
-            "considerations of the development.  The field program will include geotechnical boreholes "
+            "considerations of the development. The field program will include geotechnical boreholes "
             "advanced using a track mounted solid stem auger drilling rig. It is our understanding access "
             "and clearing, if required, to the boreholes is suitable for a track mounted drilling rig and "
-            "will be provided by the client as this work is outside the scope of our proposal.  The proposed "
+            "will be provided by the client as this work is outside the scope of our proposal. The proposed "
             "scope of work for this project includes:"
         )
         self.assertIn(fixed, text)
@@ -316,7 +316,7 @@ class StandardDocumentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base, costs = make_standard_templates(directory)
             costs.unlink()  # An encrypted deployment need not have a separate cost-template DOCX.
-            expected_widths = [Twips(value) for value in (2506, 2756, 501, 501, 1086, 1002)]
+            expected_widths = [Twips(value) for value in (2255, 3341, 501, 585, 793, 877)]
             for project in ("Current Example Development", "A different project with different scope"):
                 with self.subTest(project=project):
                     facts = sample_facts().model_copy(update={"project_name": project})
@@ -330,14 +330,20 @@ class StandardDocumentTest(unittest.TestCase):
                     self.assertEqual(item_paragraph.paragraph_format.space_after, Pt(0))
                     self.assertAlmostEqual(item_paragraph.paragraph_format.line_spacing, 1.07917, places=4)
                     self.assertFalse(result.tables[0].autofit)
-                    self.assertFalse(result.tables[0]._tbl.xpath(".//w:gridSpan|.//w:vMerge"))
+                    self.assertFalse(result.tables[0]._tbl.xpath(".//w:vMerge"))
+                    # Only section titles (full row) and the Estimated Cost label (Est. + Rate) span columns.
+                    for row in result.tables[0].rows:
+                        spans = row._tr.xpath("./w:tc/w:tcPr/w:gridSpan/@w:val")
+                        if spans:
+                            first = row.cells[0].text
+                            self.assertTrue(spans == ["6"] or (spans == ["2"] and row.cells[3].text == "Estimated Cost"), first)
                     self.assertTrue(result.tables[0].rows[0]._tr.xpath("./w:trPr/w:tblHeader"))
                     for row in result.tables[0].rows:
                         self.assertTrue(row._tr.xpath("./w:trPr/w:cantSplit"))
                         for cell in row.cells:
                             self.assertEqual(cell.vertical_alignment, WD_CELL_VERTICAL_ALIGNMENT.CENTER)
                             for paragraph in cell.paragraphs:
-                                self.assertEqual(paragraph.alignment, WD_ALIGN_PARAGRAPH.CENTER)
+                                self.assertEqual(paragraph.alignment, WD_ALIGN_PARAGRAPH.LEFT)
                     text = "\n".join(paragraph.text for paragraph in result.paragraphs)
                     self.assertNotIn("Approved closure one.", text)
                     self.assertNotIn("AI text must not replace", text)
